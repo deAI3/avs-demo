@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	MaxRetries                        = 100
+	MaxRetries                        = 10
 	RetryInterval                     = 2 * time.Second
 	BlockInterval              uint64 = 1000
 	PollLatestBatchInterval           = 5 * time.Second

@@ -1,39 +1,40 @@
 package aggregator
 
 import (
-	"math/big"
 	"sync"
 
-	aptos "github.com/aptos-labs/aptos-go-sdk"
-	"github.com/aptos-labs/aptos-go-sdk/bcs"
+	// aptos "github.com/aptos-labs/aptos-go-sdk"
 	"go.uber.org/zap"
 )
 
 type AggregatorConfig struct {
 	ServerIpPortAddress string
-	AvsAddress          string
-	AccountConfig       AccountConfig
+	StorePath           string
+	// AvsAddress          string
+	// AccountConfig AccountConfig
 }
 
-type AccountConfig struct {
-	AccountPath string
-	Profile     string
-}
+// type AccountConfig struct {
+// 	AccountPath string // store path
+// 	Profile     string
+// }
 
 type Aggregator struct {
-	logger            *zap.Logger
-	AvsAddress        string
-	AggregatorAccount aptos.Account
-	AggregatorConfig  AggregatorConfig
-	TaskQueue         chan Task
-	PendingTasks      map[uint64]TaskInfo
-	TaskMutex         sync.Mutex
-	Network           aptos.NetworkConfig
+	logger *zap.Logger
+	// AvsAddress        string
+	// AggregatorAccount aptos.Account
+	AggregatorConfig AggregatorConfig
+	TaskQueue        chan Task
+	PendingTasks     map[uint64]TaskInfo
+	CurrentOperators []Operator
+	TaskMutex        sync.Mutex
+	OperatorMutex    sync.Mutex
+	// Network           aptos.NetworkConfig
 }
 
 type TaskInfo struct {
 	State     map[string]interface{}
-	Responses []SignedTaskResponse
+	Responses map[uint64][]SignedTaskResponse
 }
 
 type Task struct {
@@ -45,45 +46,50 @@ type SignedTaskResponse struct {
 	TaskId    uint64
 	Pubkey    []byte
 	Signature []byte
-	Response  *big.Int
+	Response  []string
 }
 
-type U128Struct struct {
-	Value *big.Int `json:"value"`
+type Operator struct {
+	Pubkey []byte
+	Stake  uint64
 }
 
-func (u *U128Struct) MarshalBCS(ser *bcs.Serializer) {
-	ser.U128(*u.Value)
-}
+// type U128Struct struct {
+// 	Value *big.Int `json:"value"`
+// }
 
-type BytesStruct struct {
-	Value []byte
-}
+// func (u *U128Struct) MarshalBCS(ser *bcs.Serializer) {
+// 	ser.U128(*u.Value)
+// }
 
-func (b *BytesStruct) MarshalBCS(ser *bcs.Serializer) {
-	ser.WriteBytes(b.Value)
-}
+// type BytesStruct struct {
+// 	Value []byte
+// }
 
-type U8Struct struct {
-	Value uint8
-}
+// func (b *BytesStruct) MarshalBCS(ser *bcs.Serializer) {
+// 	ser.WriteBytes(b.Value)
+// }
 
-func (u *U8Struct) MarshalBCS(ser *bcs.Serializer) {
-	ser.U8(u.Value)
-}
+// type U8Struct struct {
+// 	Value uint8
+// }
 
-type VecAddr struct {
-	Value []aptos.AccountAddress
-}
+// func (u *U8Struct) MarshalBCS(ser *bcs.Serializer) {
+// 	ser.U8(u.Value)
+// }
 
-func (v *VecAddr) MarshalBCS(ser *bcs.Serializer) {
-	bcs.SerializeSequence(v.Value, ser)
-}
+// type VecAddr struct {
+// 	Value []aptos.AccountAddress
+// }
 
-type Addr struct {
-	Value aptos.AccountAddress
-}
+// func (v *VecAddr) MarshalBCS(ser *bcs.Serializer) {
+// 	bcs.SerializeSequence(v.Value, ser)
+// }
 
-func (v *Addr) MarshalBCS(ser *bcs.Serializer) {
-	v.Value.MarshalBCS(ser)
-}
+// type Addr struct {
+// 	Value aptos.AccountAddress
+// }
+
+// func (v *Addr) MarshalBCS(ser *bcs.Serializer) {
+// 	v.Value.MarshalBCS(ser)
+// }

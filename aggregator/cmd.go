@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
 
 	"github.com/aptos-labs/aptos-go-sdk"
@@ -14,9 +14,9 @@ import (
 )
 
 const (
-	flagAptosNetwork          = "aptos-network"
-	flagAggregatorConfig      = "aggregator-config"
-	flagAggregatorAccountPath = "aggregator-account"
+	flagAptosNetwork        = "aptos-network"
+	flagAggregatorConfig    = "aggregator-config"
+	flagAggregatorStorePath = "aggregator-store-path"
 )
 
 func AggregatorCommand(zLogger *zap.Logger) *cobra.Command {
@@ -44,10 +44,10 @@ func Start(logger *zap.Logger) *cobra.Command {
 		Args:  cobra.ExactArgs(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Get all the flags
-			network, err := cmd.Flags().GetString(flagAptosNetwork)
-			if err != nil {
-				return errors.Wrap(err, flagAptosNetwork)
-			}
+			// network, err := cmd.Flags().GetString(flagAptosNetwork)
+			// if err != nil {
+			// 	return errors.Wrap(err, flagAptosNetwork)
+			// }
 			aggregatorConfigPath, err := cmd.Flags().GetString(flagAggregatorConfig)
 			if err != nil {
 				return errors.Wrap(err, flagAggregatorConfig)
@@ -58,12 +58,12 @@ func Start(logger *zap.Logger) *cobra.Command {
 				return fmt.Errorf("can not load aggregator config: %s", err)
 			}
 
-			networkConfig, err := extractNetwork(network)
-			if err != nil {
-				return fmt.Errorf("wrong config: %s", err)
-			}
+			// networkConfig, err := extractNetwork(network)
+			// if err != nil {
+			// 	return fmt.Errorf("wrong config: %s", err)
+			// }
 
-			aggregator, err := NewAggregator(*aggregatorConfig, logger, networkConfig)
+			aggregator, err := NewAggregator(*aggregatorConfig, logger)
 			if err != nil {
 				logger.Error("Cannot create aggregator", zap.Any("err", err))
 				return err
@@ -97,7 +97,7 @@ func CreateAggregatorConfig(logger *zap.Logger) *cobra.Command {
 		Short: "config",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			aggregatorAccountPath, err := cmd.Flags().GetString(flagAggregatorAccountPath)
+			aggregatorStorePath, err := cmd.Flags().GetString(flagAggregatorStorePath)
 			if err != nil {
 				return errors.Wrap(err, flagAggregatorConfig)
 			}
@@ -107,19 +107,20 @@ func CreateAggregatorConfig(logger *zap.Logger) *cobra.Command {
 				return errors.Wrap(err, flagAggregatorConfig)
 			}
 
-			avsAddress := aptos.AccountAddress{}
-			if err := avsAddress.ParseStringRelaxed(args[0]); err != nil {
-				return fmt.Errorf("failed to parse avs address: %s", err)
-			}
+			// avsAddress := aptos.AccountAddress{}
+			// if err := avsAddress.ParseStringRelaxed(args[0]); err != nil {
+			// 	return fmt.Errorf("failed to parse avs address: %s", err)
+			// }
 
 			portAddr := args[1]
 			aggregatorConfig := AggregatorConfig{
 				ServerIpPortAddress: portAddr,
-				AvsAddress:          avsAddress.String(),
-				AccountConfig: AccountConfig{
-					AccountPath: aggregatorAccountPath,
-					Profile:     "aggregator",
-				},
+				StorePath:           aggregatorStorePath,
+				// AvsAddress:          avsAddress.String(),
+				// AccountConfig: AccountConfig{
+				// 	AccountPath: aggregatorAccountPath,
+				// 	Profile:     "aggregator",
+				// },
 			}
 			bz, err := json.Marshal(aggregatorConfig)
 			if err != nil {
@@ -138,7 +139,7 @@ func CreateAggregatorConfig(logger *zap.Logger) *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().String(flagAggregatorAccountPath, ".aptos/config.yaml", "default for the account derivation")
+	cmd.Flags().String(flagAggregatorStorePath, ".aggregator", "default for the store path")
 	cmd.Flags().String(flagAggregatorConfig, "config/aggregator-config.json", "path for the config file of aggregator")
 	return cmd
 }
@@ -152,7 +153,7 @@ func loadAggregatorConfig(filename string) (*AggregatorConfig, error) {
 	defer file.Close()
 
 	// Read the file contents
-	bytes, err := ioutil.ReadAll(file)
+	bytes, err := io.ReadAll(file)
 	if err != nil {
 		return nil, fmt.Errorf("error reading config file: %v", err)
 	}

@@ -2,9 +2,14 @@ package aggregator
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/rpc"
+	"os"
+	"slices"
+
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -38,6 +43,17 @@ func (agg *Aggregator) ServeOperators() error {
 	return nil
 }
 
+func (agg *Aggregator) HandleOperatorRegister(operator OperatorRegisterRequest) error {
+	agg.logger.Info("Received operators request")
+
+	if err := agg.processOperatorRegisterRequest(operator); err != nil {
+		agg.logger.Error("Failed to process operator register request", zap.Error(err))
+		return fmt.Errorf("failed to process operator register request: %v", err)
+	}
+	agg.logger.Info("Successfully processed operator register request", zap.Any("operator", operator))
+	return nil
+}
+
 // Define the RespondTask method for handling incoming RPC calls
 func (agg *Aggregator) RespondTask(signedTaskResponse SignedTaskResponse, reply *uint8) error {
 	agg.logger.Info("Received signed task response", zap.Any("response", signedTaskResponse))
@@ -54,13 +70,52 @@ func (agg *Aggregator) RespondTask(signedTaskResponse SignedTaskResponse, reply 
 	return nil
 }
 
-func (agg *Aggregator) processTaskResponse(signedTaskResponse SignedTaskResponse) error {
-	fmt.Println("test")
-	client, err := aptos.NewClient(agg.Network)
-	if err != nil {
-		return fmt.Errorf("failed to create aptos client: %v", err)
+func (agg *Aggregator) processOperatorRegisterRequest(operator Operator) error {
+	agg.OperatorMutex.Lock()
+
+	var operators []Operator
+	storePath := filepath.Join(agg.AggregatorConfig.StorePath, "operators.json")
+	if _, err := os.Stat(storePath); err == nil {
+		data, err := os.ReadFile(storePath)
+		if err != nil {
+			agg.OperatorMutex.Unlock()
+			return fmt.Errorf("error reading operators file: %v", err)
+		}
+
+		err = json.Unmarshal(data, &operators)
+		if err != nil {
+			agg.OperatorMutex.Unlock()
+			return fmt.Errorf("error unmarshalling operators data: %v", err)
+		}
+	} else if !os.IsNotExist(err) {
+		agg.OperatorMutex.Unlock()
+		return fmt.Errorf("error checking operators file: %v", err)
 	}
 
+	// Check if the operator already exists
+	for _, existingOperator := range operators {
+		if slices.Equal(existingOperator.Pubkey, operator.Pubkey) {
+			agg.OperatorMutex.Unlock()
+			return fmt.Errorf("operator with pubkey %s already exists", operator.Pubkey)
+		}
+	}
+
+	// Add the new operator to the list
+	operators = append(operators, operator)
+	agg.CurrentOperators = operators
+	agg.OperatorMutex.Unlock()
+	bz, err := json.Marshal(operators)
+	if err != nil {
+		return fmt.Errorf("error marshalling operators data: %v", err)
+	}
+	err = os.WriteFile(storePath, bz, 0644)
+	if err != nil {
+		return fmt.Errorf("error writing operators file: %v", err)
+	}
+	agg.logger.Info("Operator registered successfully", zap.Any("operator", operator))
+	return nil
+}
+func (agg *Aggregator) processTaskResponse(signedTaskResponse SignedTaskResponse) error {
 	var timestamp uint64
 	agg.TaskMutex.Lock()
 	taskInfo, exists := agg.PendingTasks[signedTaskResponse.TaskId]
