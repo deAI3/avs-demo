@@ -1,0 +1,26 @@
+[package]
+name = "avs"
+version = "1.0.0"
+authors = []
+
+[addresses]
+aptos_framework = "0x1"
+restaking = "0x73b0111387aec1031a2e9c0d616e39e268b2c0c4a488b7b6b9ab2399dc86a14d"
+deployer1 = "0xc2ada184d31ee09bac3b04abb3d1b87c169301a1ad982955bdc65774a723920b"
+avs = "0xcdf119ccd4f2a44b13332ee54cd5d39a3805945ae80b7599ddf34d8e5ee12f0a"
+
+[dev-addresses]
+deployer1 = "0xc2ada184d31ee09bac3b04abb3d1b87c169301a1ad982955bdc65774a723920b"
+restaking = "0x73b0111387aec1031a2e9c0d616e39e268b2c0c4a488b7b6b9ab2399dc86a14d"
+avs = "0xcdf119ccd4f2a44b13332ee54cd5d39a3805945ae80b7599ddf34d8e5ee12f0a"
+
+[dependencies.AptosFramework]
+git = "https://github.com/aptos-labs/aptos-core.git"
+rev = "mainnet"
+subdir = "aptos-move/framework/aptos-framework"
+
+[dependencies.restaking]
+git = "https://github.com/A2Dsquad/restaking-contracts"
+rev = "54426529eba35077efa0055e725d5e03e565bb9a"
+
+[dev-dependencies]
