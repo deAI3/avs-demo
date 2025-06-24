@@ -2,9 +2,19 @@ package aggregator
 
 import (
 	"sync"
+	"time"
 
 	// aptos "github.com/aptos-labs/aptos-go-sdk"
 	"go.uber.org/zap"
+)
+
+type TaskState uint8
+
+const (
+	WaitingForApply TaskState = 1
+	TempResult      TaskState = 2
+	Finalize        TaskState = 3
+	Unknown         TaskState = 0
 )
 
 type AggregatorConfig struct {
@@ -24,8 +34,8 @@ type Aggregator struct {
 	// AvsAddress        string
 	// AggregatorAccount aptos.Account
 	AggregatorConfig AggregatorConfig
-	TaskQueue        chan Task
-	PendingTasks     map[uint64]TaskInfo
+	TaskQueue        chan TaskInfo
+	PendingTasks     []TaskInfo
 	CurrentOperators []Operator
 	TaskMutex        sync.Mutex
 	OperatorMutex    sync.Mutex
@@ -33,13 +43,10 @@ type Aggregator struct {
 }
 
 type TaskInfo struct {
-	State     map[string]interface{}
-	Responses map[uint64][]SignedTaskResponse
-}
-
-type Task struct {
-	Id   uint64
-	Task map[string]interface{}
+	Id              uint64
+	TaskConfig      TaskConfig
+	Task            TaskPayload
+	TaskCreatedTime time.Time
 }
 
 type SignedTaskResponse struct {
@@ -52,6 +59,51 @@ type SignedTaskResponse struct {
 type Operator struct {
 	Pubkey []byte
 	Stake  uint64
+}
+
+type TaskConfig struct {
+	NumGenerators               uint64
+	TokenThreshold              uint64
+	InferenceStepExpirationTime time.Duration
+}
+
+type TaskPayload struct {
+	State         TaskState
+	Prompt        string
+	CurrentTokens []string
+	TempResult    *TempResultData
+	FinalResult   *FinalResultData
+}
+
+type TempResultData struct {
+	CurrentStep            uint64
+	Steps                  []InferenceStep
+	NextStepExpirationTime time.Time
+}
+
+type FinalResultData struct {
+	Output           string
+	TotalSteps       uint64
+	WinningGenerator []byte // Public key of the winning generator
+	CompletionTime   time.Time
+}
+
+type InferenceStep struct {
+	Step              uint64
+	Tokens            []string
+	Finalized         bool
+	Generators        [][]byte // List of generators' public keys
+	Validators        [][]byte // List of validators' public keys
+	GeneratorResults  [][]string
+	VerificationVotes []VerificationVote
+	ChoseGenerator    []byte // Public key of the chosen generator
+}
+
+type VerificationVote struct {
+	Tokens         []string
+	OperatorPubkey []byte
+	Signature      []byte
+	TimeStamp      time.Time
 }
 
 // type U128Struct struct {

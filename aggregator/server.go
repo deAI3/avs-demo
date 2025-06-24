@@ -43,14 +43,38 @@ func (agg *Aggregator) ServeOperators() error {
 	return nil
 }
 
-func (agg *Aggregator) HandleOperatorRegister(operator OperatorRegisterRequest) error {
+func (agg *Aggregator) HandleOperatorRegister(operator Operator, reply *uint8) error {
 	agg.logger.Info("Received operators request")
 
 	if err := agg.processOperatorRegisterRequest(operator); err != nil {
 		agg.logger.Error("Failed to process operator register request", zap.Error(err))
 		return fmt.Errorf("failed to process operator register request: %v", err)
 	}
+	// Set reply to indicate success (e.g., 0 = success)
+	*reply = 0
 	agg.logger.Info("Successfully processed operator register request", zap.Any("operator", operator))
+	return nil
+}
+
+func (agg *Aggregator) HandleOperatorDeregister(pubkey []byte, reply *uint8) error {
+	agg.logger.Info("Received operator deregister request", zap.ByteString("pubkey", pubkey))
+
+	if err := agg.processOperatorDeregisterRequest(pubkey); err != nil {
+		agg.logger.Error("Failed to process operator deregister request", zap.Error(err))
+		return fmt.Errorf("failed to process operator deregister request: %v", err)
+	}
+	// Set reply to indicate success (e.g., 0 = success)
+	*reply = 0
+	agg.logger.Info("Successfully processed operator deregister request", zap.ByteString("pubkey", pubkey))
+	return nil
+}
+
+func (agg *Aggregator) GetPendingTasks(reply *[]TaskInfo) error {
+	agg.logger.Info("Received request for pending tasks")
+
+	// Set the reply to the slice of tasks
+	*reply = agg.PendingTasks
+	agg.logger.Info("Successfully retrieved pending tasks", zap.Int("count", len(agg.PendingTasks)))
 	return nil
 }
 
@@ -114,6 +138,53 @@ func (agg *Aggregator) processOperatorRegisterRequest(operator Operator) error {
 	}
 	agg.logger.Info("Operator registered successfully", zap.Any("operator", operator))
 	return nil
+}
+
+func (agg *Aggregator) processOperatorDeregisterRequest(pubkey []byte) error {
+	agg.OperatorMutex.Lock()
+
+	storePath := filepath.Join(agg.AggregatorConfig.StorePath, "operators.json")
+	var operators []Operator
+	if _, err := os.Stat(storePath); err == nil {
+		data, err := os.ReadFile(storePath)
+		if err != nil {
+			agg.OperatorMutex.Unlock()
+			return fmt.Errorf("error reading operators file: %v", err)
+		}
+
+		err = json.Unmarshal(data, &operators)
+		if err != nil {
+			agg.OperatorMutex.Unlock()
+			return fmt.Errorf("error unmarshalling operators data: %v", err)
+		}
+	} else {
+		agg.OperatorMutex.Unlock()
+		return fmt.Errorf("error checking operators file: %v", err)
+	}
+
+	// Find and remove the operator with the given pubkey
+	for i, existingOperator := range operators {
+		if slices.Equal(existingOperator.Pubkey, pubkey) {
+			operators = append(operators[:i], operators[i+1:]...)
+			agg.CurrentOperators = operators
+			bz, err := json.Marshal(operators)
+			if err != nil {
+				agg.OperatorMutex.Unlock()
+				return fmt.Errorf("error marshalling operators data: %v", err)
+			}
+			err = os.WriteFile(storePath, bz, 0644)
+			if err != nil {
+				agg.OperatorMutex.Unlock()
+				return fmt.Errorf("error writing operators file: %v", err)
+			}
+			agg.logger.Info("Operator deregistered successfully", zap.ByteString("pubkey", pubkey))
+			agg.OperatorMutex.Unlock()
+			return nil
+		}
+	}
+
+	agg.OperatorMutex.Unlock()
+	return fmt.Errorf("operator with pubkey %s not found", pubkey)
 }
 func (agg *Aggregator) processTaskResponse(signedTaskResponse SignedTaskResponse) error {
 	var timestamp uint64

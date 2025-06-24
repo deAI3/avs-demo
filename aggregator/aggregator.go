@@ -25,8 +25,8 @@ func NewAggregator(aggregatorConfig AggregatorConfig, logger *zap.Logger) (*Aggr
 		// AvsAddress:        aggregatorConfig.AvsAddress,
 		// AggregatorAccount: *aggegator_account,
 		AggregatorConfig: aggregatorConfig,
-		TaskQueue:        make(chan Task, taskQueueSize),
-		PendingTasks:     make(map[uint64]TaskInfo),
+		TaskQueue:        make(chan TaskInfo, taskQueueSize),
+		PendingTasks:     []TaskInfo{},
 
 		// Network: network,
 	}
@@ -45,7 +45,6 @@ func (agg *Aggregator) Start(ctx context.Context) error {
 			agg.logger.Fatal("Error starting RPC server", zap.Any("err", err))
 		}
 	}()
-
 	
 
 	go func() {
