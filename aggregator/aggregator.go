@@ -1,7 +1,9 @@
 package aggregator
 
 import (
+	"avs/aggregator/routes"
 	"context"
+	"log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -46,8 +48,6 @@ func (agg *Aggregator) Start(ctx context.Context) error {
 		}
 	}()
 
-	
-
 	go func() {
 		agg.logger.Info("Fetching tasks process started...")
 		// err := agg.FetchTasks(ctx)
@@ -56,14 +56,17 @@ func (agg *Aggregator) Start(ctx context.Context) error {
 		// }
 	}()
 
-	// TODO: Update task state
-
+	// start api server
 	go func() {
-		agg.logger.Info("Chore process started...")
-		// err := agg.DoChore(ctx)
-		// if err != nil {
-		// 	agg.logger.Fatal("Error do chore", zap.Any("err", err))
-		// }
+		agg.logger.Info("api server process started...")
+
+		router := routes.SetupRoutes()
+
+		log.Println("Server running on http://localhost:8080")
+		err := router.Run(":8080")
+		if err != nil {
+			agg.logger.Fatal("Error when starting api server", zap.Any("err", err))
+		}
 	}()
 
 	sigChan := make(chan os.Signal, 1)

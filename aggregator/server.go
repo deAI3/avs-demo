@@ -117,6 +117,7 @@ func (agg *Aggregator) processOperatorRegisterRequest(operator Operator) error {
 }
 func (agg *Aggregator) processTaskResponse(signedTaskResponse SignedTaskResponse) error {
 	var timestamp uint64
+	var err error
 	agg.TaskMutex.Lock()
 	taskInfo, exists := agg.PendingTasks[signedTaskResponse.TaskId]
 	if exists {
@@ -126,11 +127,6 @@ func (agg *Aggregator) processTaskResponse(signedTaskResponse SignedTaskResponse
 			return fmt.Errorf("error converting string to uint64: %v", err)
 		}
 	} else {
-		avs := aptos.AccountAddress{}
-		err := avs.ParseStringRelaxed(agg.AvsAddress)
-		if err != nil {
-			return fmt.Errorf("error parsing avs address while loading task: %v", err)
-		}
 		task, err := LoadTaskById(client, avs, signedTaskResponse.TaskId)
 		if err != nil {
 			return fmt.Errorf("error loading task: %v", err)
@@ -147,7 +143,7 @@ func (agg *Aggregator) processTaskResponse(signedTaskResponse SignedTaskResponse
 		agg.PendingTasks[signedTaskResponse.TaskId] = taskInfo
 	}
 
-	taskInfo.Responses = append(taskInfo.Responses, signedTaskResponse)
+	taskInfo.Responses[signedTaskResponse.TaskId] = append(taskInfo.Responses[signedTaskResponse.TaskId], signedTaskResponse)
 	resps := []U128Struct{}
 	pks := []BytesStruct{}
 	sigs := []BytesStruct{}
@@ -306,13 +302,12 @@ func RespondToAvs(
 // signer_pubkeys: vector<vector<u8>>,
 // signer_sigs: vector<vector<u8>>,
 func CheckSignatures(
-	client *aptos.Client,
 	contractAddr string,
 	quorumNumbers uint8,
 	referenceTimestamp uint64,
-	msgHashes []BytesStruct,
-	pubkey []BytesStruct,
-	signature []BytesStruct,
+	msgHashes []byte,
+	pubkey []byte,
+	signature []byte,
 ) (uint64, uint64, error) {
 	contract := aptos.AccountAddress{}
 	err := contract.ParseStringRelaxed(contractAddr)
@@ -375,18 +370,10 @@ func CheckSignatures(
 }
 
 func GetMsgHashes(
-	client *aptos.Client,
-	contractAddr string,
 	taskId uint64,
 	responses []U128Struct,
 	pubkey []BytesStruct,
 ) ([]interface{}, error) {
-	contract := aptos.AccountAddress{}
-	err := contract.ParseStringRelaxed(contractAddr)
-	if err != nil {
-		panic("Failed to parse address:" + err.Error())
-	}
-
 	taskIdBcs, err := bcs.SerializeU64(taskId)
 	if err != nil {
 		panic("Failed to bcs serialize task id:" + err.Error())

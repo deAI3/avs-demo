@@ -89,12 +89,6 @@ func (op *Operator) FetchTasks(ctx context.Context) error {
 }
 
 func (op *Operator) RespondTask(ctx context.Context) error {
-
-	client, err := aptos.NewClient(op.network)
-	if err != nil {
-		return fmt.Errorf("failed to create aptos client: %v", err)
-	}
-	// TODO
 	for task := range op.TaskQueue {
 		denom := task.Task["data_request"].(string)
 		upperDenom := strings.ToUpper(denom)
@@ -138,7 +132,7 @@ func (op *Operator) RespondTask(ctx context.Context) error {
 	return nil
 }
 
-func GetMsgHash(client *aptos.Client, contract aptos.AccountAddress, taskId uint64, response big.Int) (string, error) {
+func GetMsgHash(taskId uint64, response big.Int) (string, error) {
 	taskIdBcs, err := bcs.SerializeU64(taskId)
 	if err != nil {
 		return "", fmt.Errorf("can not SerializeU64: %v", err)
