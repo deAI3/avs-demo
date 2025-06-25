@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package avs;
 
+option go_package = "proto/socket";
+
 service TaskService {
     rpc TaskStream(stream TaskResponseMessage) returns (stream TaskMessage);
     rpc VoteStream(stream ResponseVoteMessage) returns (stream TaskResponseMessage);

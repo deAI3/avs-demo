@@ -1,6 +1,7 @@
 package aggregator
 
 import (
+	"avs/types/proto/socket"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -48,12 +49,11 @@ func (agg *Aggregator) HandleOperatorRegister(operator Operator, reply *uint8) e
 		return fmt.Errorf("failed to process operator register request: %v", err)
 	}
 	// establish a stream channel
-	agg.TaskClients[string(operator.Pubkey)] = make(chan , 10)
-	agg.VoteClients[string(operator.Pubkey)] = make(chan , 10)
+	agg.TaskClients[string(operator.Pubkey)] = make(chan socket.TaskMessage, 10)
+	agg.VoteClients[string(operator.Pubkey)] = make(chan socket.TaskResponseMessage, 10)
 
 	// Set reply to indicate success (e.g., 0 = success)
 	*reply = 0
-
 
 	agg.logger.Info("Successfully processed operator register request", zap.Any("operator", operator))
 	return nil
@@ -78,6 +78,7 @@ func (agg *Aggregator) HandleOperatorDeregister(pubkey []byte, reply *uint8) err
 }
 
 // Define the RespondTask method for handling incoming RPC calls
+// TODO update here
 func (agg *Aggregator) RespondTask(signedTaskResponse SignedTaskResponse, reply *uint8) error {
 	agg.logger.Info("Received signed task response", zap.Any("response", signedTaskResponse))
 
@@ -182,6 +183,7 @@ func (agg *Aggregator) processOperatorDeregisterRequest(pubkey []byte) error {
 	return fmt.Errorf("operator with pubkey %s not found", pubkey)
 }
 
+// TODO update here
 func (agg *Aggregator) processTaskResponse(signedTaskResponse SignedTaskResponse) error {
 	var timestamp uint64
 	var err error
@@ -288,7 +290,7 @@ func (agg *Aggregator) processTaskResponse(signedTaskResponse SignedTaskResponse
 // responses: vector<u128>,
 // signer_pubkeys: vector<vector<u8>>,
 // signer_sigs: vector<vector<u8>>,
-
+// TODO update here
 func RespondToAvs(
 	client *aptos.Client,
 	aggregatorAccount *aptos.Account,
@@ -368,6 +370,7 @@ func RespondToAvs(
 // msg_hashes: vector<vector<u8>>,
 // signer_pubkeys: vector<vector<u8>>,
 // signer_sigs: vector<vector<u8>>,
+// TODO update here
 func CheckSignatures(
 	contractAddr string,
 	quorumNumbers uint8,

@@ -4,8 +4,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
+
+	"avs/types/proto/socket"
 )
 
 type TaskState uint8
@@ -37,12 +38,13 @@ type Aggregator struct {
 	TaskMutex        sync.Mutex
 	OperatorMutex    sync.Mutex
 
-	// socket
-	TaskClients map[string]*websocket.Conn // map node address to socket connection
-	VoteClients map[string]*websocket.Conn // map node address to socket connection
+	// stream
+	TaskClients map[string]chan socket.TaskMessage         // map node address to stream connection
+	VoteClients map[string]chan socket.TaskResponseMessage // map node address to stream connection
 
-	broadcastChan chan TaskInfo
-	responsesRecv chan TaskInfo
+	// general channel
+	respondsChan chan socket.TaskResponseMessage
+	voteChan     chan socket.ResponseVoteMessage
 
 	taskSequence uint64
 }
