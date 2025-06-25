@@ -1,8 +1,20 @@
 package aggregator
 
 import (
-	"log"
 	"sync"
+	"time"
+
+	"github.com/gorilla/websocket"
+	"go.uber.org/zap"
+)
+
+type TaskState uint8
+
+const (
+	WaitingForApply TaskState = 1
+	TempResult      TaskState = 2
+	Finalize        TaskState = 3
+	Unknown         TaskState = 0
 )
 
 type AggregatorConfig struct {
@@ -10,39 +22,90 @@ type AggregatorConfig struct {
 	StorePath           string
 }
 
+type TaskContext struct {
+	TaskMutex sync.Mutex
+	Task      TaskInfo
+}
+
 type Aggregator struct {
-	logger *log.Logger
+	logger *zap.Logger
 
 	AggregatorConfig AggregatorConfig
-	TaskQueue        chan Task
+	TaskQueue        chan TaskInfo
 	PendingTasks     map[uint64]TaskInfo
-	CurrentOperators []Operator
+	CurrentOperators map[string]Operator
 	TaskMutex        sync.Mutex
 	OperatorMutex    sync.Mutex
+
+	// socket
+	TaskClients map[string]*websocket.Conn // map node address to socket connection
+	VoteClients map[string]*websocket.Conn // map node address to socket connection
+
+	broadcastChan chan TaskInfo
+	responsesRecv chan TaskInfo
+
+	taskSequence uint64
 }
 
 type TaskInfo struct {
-	State     map[string]interface{}
-	Responses map[uint64][]SignedTaskResponse
-}
-
-type Task struct {
-	Id   uint64
-	Task map[string]interface{}
-}
-
-type SignedTaskResponse struct {
-	TaskId    uint64
-	Pubkey    []byte
-	Signature []byte
-	Response  []string
+	Id              uint64
+	TaskConfig      TaskConfig
+	Task            TaskPayload
+	TaskCreatedTime time.Time
 }
 
 type Operator struct {
 	Pubkey []byte
 	Stake  uint64
+	Models []string
 }
 
+type TaskConfig struct {
+	NumGenerators               uint64
+	TokenThreshold              uint64
+	InferenceStepExpirationTime time.Duration
+}
+
+type TaskPayload struct {
+	State         TaskState
+	Prompt        string
+	CurrentTokens []string
+	TempResult    *TempResultData
+	FinalResult   *FinalResultData
+}
+
+type TempResultData struct {
+	CurrentStep            uint64
+	Steps                  []InferenceStep
+	NextStepExpirationTime time.Time
+}
+
+type FinalResultData struct {
+	Output           string
+	TotalSteps       uint64
+	WinningGenerator []byte // Public key of the winning generator
+	CompletionTime   time.Time
+}
+
+type InferenceStep struct {
+	Step              uint64
+	Tokens            []string
+	Finalized         bool
+	Generators        [][]byte // List of generators' public keys
+	Validators        [][]byte // List of validators' public keys
+	GeneratorResults  [][]string
+	VerificationVotes []VerificationVote
+	ChoseGenerator    []byte // Public key of the chosen generator
+}
+
+type VerificationVote struct {
+	Tokens         []string
+	OperatorPubkey []byte
+	Signature      []byte
+	TimeStamp      time.Time
+}
+
+// chat completions api
 type ChatMessage struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`

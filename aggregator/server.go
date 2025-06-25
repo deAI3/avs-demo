@@ -7,14 +7,11 @@ import (
 	"net/http"
 	"net/rpc"
 	"os"
-	"slices"
 
 	"path/filepath"
 	"strconv"
 	"strings"
 
-	"github.com/aptos-labs/aptos-go-sdk"
-	"github.com/aptos-labs/aptos-go-sdk/bcs"
 	"go.uber.org/zap"
 )
 
@@ -43,14 +40,40 @@ func (agg *Aggregator) ServeOperators() error {
 	return nil
 }
 
-func (agg *Aggregator) HandleOperatorRegister(operator OperatorRegisterRequest) error {
+func (agg *Aggregator) HandleOperatorRegister(operator Operator, reply *uint8) error {
 	agg.logger.Info("Received operators request")
 
 	if err := agg.processOperatorRegisterRequest(operator); err != nil {
 		agg.logger.Error("Failed to process operator register request", zap.Error(err))
 		return fmt.Errorf("failed to process operator register request: %v", err)
 	}
+	// establish a stream channel
+	agg.TaskClients[string(operator.Pubkey)] = make(chan , 10)
+	agg.VoteClients[string(operator.Pubkey)] = make(chan , 10)
+
+	// Set reply to indicate success (e.g., 0 = success)
+	*reply = 0
+
+
 	agg.logger.Info("Successfully processed operator register request", zap.Any("operator", operator))
+	return nil
+}
+
+func (agg *Aggregator) HandleOperatorDeregister(pubkey []byte, reply *uint8) error {
+	agg.logger.Info("Received operator deregister request", zap.ByteString("pubkey", pubkey))
+
+	if err := agg.processOperatorDeregisterRequest(pubkey); err != nil {
+		agg.logger.Error("Failed to process operator deregister request", zap.Error(err))
+		return fmt.Errorf("failed to process operator deregister request: %v", err)
+	}
+
+	// remove stream channel
+	delete(agg.TaskClients, string(pubkey))
+	delete(agg.VoteClients, string(pubkey))
+
+	// Set reply to indicate success (e.g., 0 = success)
+	*reply = 0
+	agg.logger.Info("Successfully processed operator deregister request", zap.ByteString("pubkey", pubkey))
 	return nil
 }
 
@@ -73,7 +96,7 @@ func (agg *Aggregator) RespondTask(signedTaskResponse SignedTaskResponse, reply 
 func (agg *Aggregator) processOperatorRegisterRequest(operator Operator) error {
 	agg.OperatorMutex.Lock()
 
-	var operators []Operator
+	var operators map[string]Operator
 	storePath := filepath.Join(agg.AggregatorConfig.StorePath, "operators.json")
 	if _, err := os.Stat(storePath); err == nil {
 		data, err := os.ReadFile(storePath)
@@ -93,15 +116,13 @@ func (agg *Aggregator) processOperatorRegisterRequest(operator Operator) error {
 	}
 
 	// Check if the operator already exists
-	for _, existingOperator := range operators {
-		if slices.Equal(existingOperator.Pubkey, operator.Pubkey) {
-			agg.OperatorMutex.Unlock()
-			return fmt.Errorf("operator with pubkey %s already exists", operator.Pubkey)
-		}
+	if _, has := operators[string(operator.Pubkey)]; has {
+		agg.OperatorMutex.Unlock()
+		return fmt.Errorf("operator already exists", operator.Pubkey)
 	}
 
 	// Add the new operator to the list
-	operators = append(operators, operator)
+	operators[string(operator.Pubkey)] = operator
 	agg.CurrentOperators = operators
 	agg.OperatorMutex.Unlock()
 	bz, err := json.Marshal(operators)
@@ -115,6 +136,52 @@ func (agg *Aggregator) processOperatorRegisterRequest(operator Operator) error {
 	agg.logger.Info("Operator registered successfully", zap.Any("operator", operator))
 	return nil
 }
+
+func (agg *Aggregator) processOperatorDeregisterRequest(pubkey []byte) error {
+	agg.OperatorMutex.Lock()
+
+	storePath := filepath.Join(agg.AggregatorConfig.StorePath, "operators.json")
+	var operators map[string]Operator
+	if _, err := os.Stat(storePath); err == nil {
+		data, err := os.ReadFile(storePath)
+		if err != nil {
+			agg.OperatorMutex.Unlock()
+			return fmt.Errorf("error reading operators file: %v", err)
+		}
+
+		err = json.Unmarshal(data, &operators)
+		if err != nil {
+			agg.OperatorMutex.Unlock()
+			return fmt.Errorf("error unmarshalling operators data: %v", err)
+		}
+	} else {
+		agg.OperatorMutex.Unlock()
+		return fmt.Errorf("error checking operators file: %v", err)
+	}
+
+	// Find and remove the operator with the given pubkey
+	if _, has := operators[string(pubkey)]; has {
+		delete(operators, string(pubkey))
+		agg.CurrentOperators = operators
+		bz, err := json.Marshal(operators)
+		if err != nil {
+			agg.OperatorMutex.Unlock()
+			return fmt.Errorf("error marshalling operators data: %v", err)
+		}
+		err = os.WriteFile(storePath, bz, 0644)
+		if err != nil {
+			agg.OperatorMutex.Unlock()
+			return fmt.Errorf("error writing operators file: %v", err)
+		}
+		agg.logger.Info("Operator deregistered successfully", zap.ByteString("pubkey", pubkey))
+		agg.OperatorMutex.Unlock()
+		return nil
+	}
+
+	agg.OperatorMutex.Unlock()
+	return fmt.Errorf("operator with pubkey %s not found", pubkey)
+}
+
 func (agg *Aggregator) processTaskResponse(signedTaskResponse SignedTaskResponse) error {
 	var timestamp uint64
 	var err error
@@ -367,43 +434,4 @@ func CheckSignatures(
 		return 0, 0, fmt.Errorf("error converting string to uint64: %v", err)
 	}
 	return signedStake, totalStake, nil
-}
-
-func GetMsgHashes(
-	taskId uint64,
-	responses []U128Struct,
-	pubkey []BytesStruct,
-) ([]interface{}, error) {
-	taskIdBcs, err := bcs.SerializeU64(taskId)
-	if err != nil {
-		panic("Failed to bcs serialize task id:" + err.Error())
-	}
-
-	pubkeySerializer := bcs.Serializer{}
-	bcs.SerializeSequence(pubkey, &pubkeySerializer)
-
-	responseSerializer := bcs.Serializer{}
-	bcs.SerializeSequence(responses, &responseSerializer)
-
-	payload := &aptos.ViewPayload{
-		Module: aptos.ModuleId{
-			Address: contract,
-			Name:    "service_manager",
-		},
-		Function: "get_msg_hashes",
-		ArgTypes: []aptos.TypeTag{},
-		Args: [][]byte{
-			taskIdBcs,
-			responseSerializer.ToBytes(),
-			pubkeySerializer.ToBytes(),
-		},
-	}
-
-	vals, err := client.View(payload)
-	if err != nil {
-		return nil, err
-	}
-
-	msgHashes := vals[0].([]interface{})
-	return msgHashes, nil
 }

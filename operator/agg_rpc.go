@@ -47,3 +47,57 @@ func (c *AggregatorRpcClient) SendSignedTaskResponseToAggregator(signedTaskRespo
 		}
 	}
 }
+
+func (c *AggregatorRpcClient) SendRegisterOperatorRequest(request aggregator.Operator) {
+	var reply uint8
+	for retries := 0; retries < MaxRetries; retries++ {
+		err := c.rpcClient.Call("Aggregator.HandleOperatorRegister", request, &reply)
+		if err != nil {
+			fmt.Println("Received error from aggregator", "err :", err)
+			if errors.Is(err, rpc.ErrShutdown) {
+				fmt.Println("Aggregator is shutdown. Reconnecting...")
+				client, err := rpc.DialHTTP("tcp", c.aggregatorIpPortAddr)
+				if err != nil {
+					fmt.Println("Could not reconnect to aggregator", "err", err)
+					time.Sleep(RetryInterval)
+				} else {
+					c.rpcClient = client
+					fmt.Println("Reconnected to aggregator")
+				}
+			} else {
+				fmt.Println("Received error from aggregator:", err, ". Retrying RegisterOperator RPC call...")
+				time.Sleep(RetryInterval)
+			}
+		} else {
+			fmt.Println("Register operator request accepted by aggregator.", "reply", reply)
+			return
+		}
+	}
+}
+
+func (c *AggregatorRpcClient) SendDeregisterOperatorRequest(request []byte) {
+	var reply uint8
+	for retries := 0; retries < MaxRetries; retries++ {
+		err := c.rpcClient.Call("Aggregator.HandleOperatorDeregister", request, &reply)
+		if err != nil {
+			fmt.Println("Received error from aggregator", "err :", err)
+			if errors.Is(err, rpc.ErrShutdown) {
+				fmt.Println("Aggregator is shutdown. Reconnecting...")
+				client, err := rpc.DialHTTP("tcp", c.aggregatorIpPortAddr)
+				if err != nil {
+					fmt.Println("Could not reconnect to aggregator", "err", err)
+					time.Sleep(RetryInterval)
+				} else {
+					c.rpcClient = client
+					fmt.Println("Reconnected to aggregator")
+				}
+			} else {
+				fmt.Println("Received error from aggregator:", err, ". Retrying DeregisterOperator RPC call...")
+				time.Sleep(RetryInterval)
+			}
+		} else {
+			fmt.Println("Deregister operator request accepted by aggregator.", "reply", reply)
+			return
+		}
+	}
+}

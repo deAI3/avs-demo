@@ -19,12 +19,12 @@ type Operator struct {
 	logger  *zap.Logger
 	account *aptos.Account
 	// TODO: change this to aptos-sdk fork
-	operatorId   []byte
-	avsAddress   aptos.AccountAddress
-	BlsPrivateKey        []byte
-	AggRpcClient AggregatorRpcClient
-	network      aptos.NetworkConfig
-	TaskQueue    chan Task
+	// operatorId   []byte
+	// avsAddress   aptos.AccountAddress
+	BlsPrivateKey []byte
+	AggRpcClient  AggregatorRpcClient
+	// network      aptos.NetworkConfig
+	TaskQueue chan Task
 }
 
 type Task struct {
@@ -38,8 +38,8 @@ type AggregatorRpcClient struct {
 }
 
 type OperatorConfig struct {
-	BlsPrivateKey        []byte
-	AvsAddress           string
+	BlsPrivateKey []byte
+	// AvsAddress           string
 	AggregatorIpPortAddr string
 	// OperatorId           eigentypes.OperatorId
 }

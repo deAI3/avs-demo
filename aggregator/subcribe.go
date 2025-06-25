@@ -11,3 +11,9 @@ const (
 	PollLatestBatchInterval           = 5 * time.Second
 	RemoveBatchFromSetInterval        = 5 * time.Minute
 )
+
+const (
+	TaskEvent = "task"
+	Respond   = "respond"
+	Vote      = "vote"
+)

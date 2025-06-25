@@ -1,15 +1,11 @@
 package aggregator
 
 import (
-	"avs/aggregator/routes"
 	"context"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
-
-	// "github.com/aptos-labs/aptos-go-sdk"
-	// "github.com/aptos-labs/aptos-go-sdk/bcs"
 
 	"go.uber.org/zap"
 )
@@ -24,13 +20,11 @@ func NewAggregator(aggregatorConfig AggregatorConfig, logger *zap.Logger) (*Aggr
 
 	agg := Aggregator{
 		logger: logger,
-		// AvsAddress:        aggregatorConfig.AvsAddress,
-		// AggregatorAccount: *aggegator_account,
-		AggregatorConfig: aggregatorConfig,
-		TaskQueue:        make(chan Task, taskQueueSize),
-		PendingTasks:     make(map[uint64]TaskInfo),
 
-		// Network: network,
+		AggregatorConfig: aggregatorConfig,
+		TaskQueue:        make(chan TaskInfo, taskQueueSize),
+		PendingTasks:     make(map[uint64]TaskInfo),
+		taskSequence:     0,
 	}
 	return &agg, nil
 }
@@ -48,25 +42,46 @@ func (agg *Aggregator) Start(ctx context.Context) error {
 		}
 	}()
 
-	go func() {
-		agg.logger.Info("Fetching tasks process started...")
-		// err := agg.FetchTasks(ctx)
-		// if err != nil {
-		// 	agg.logger.Fatal("Error listening for tasks", zap.Any("err", err))
-		// }
-	}()
-
-	// start api server
+	// start api server and websocket
 	go func() {
 		agg.logger.Info("api server process started...")
 
-		router := routes.SetupRoutes()
+		router := agg.SetupRoutes()
 
 		log.Println("Server running on http://localhost:8080")
 		err := router.Run(":8080")
 		if err != nil {
 			agg.logger.Fatal("Error when starting api server", zap.Any("err", err))
 		}
+	}()
+
+	// handle responds from nodes through the following steps:
+	//
+	// - emit event includes the repsonds to verifiers
+	// - wait for verifier results to update task state
+	// - when task reach finalized state, store results on state
+	go func() {
+		for {
+			for addr, conn := range agg.clients {
+
+			}
+			msg := <-agg.responsesRecv
+
+			// TODO: emit responses to verifier node
+
+		}
+	}()
+
+	// distribute tasks to nodes through the following steps:
+	//
+	// - choose a propser node
+	// - emit event includes the task and propose node address
+	go func() {
+		agg.logger.Info("Fetching tasks process started...")
+		// err := agg.FetchTasks(ctx)
+		// if err != nil {
+		// 	agg.logger.Fatal("Error listening for tasks", zap.Any("err", err))
+		// }
 	}()
 
 	sigChan := make(chan os.Signal, 1)
@@ -80,115 +95,3 @@ func (agg *Aggregator) Start(ctx context.Context) error {
 
 	return nil
 }
-
-// func (agg *Aggregator) FetchTasks(ctx context.Context) error {
-// 	client, err := aptos.NewClient(agg.Network)
-// 	if err != nil {
-// 		return fmt.Errorf("failed to create aptos client: %v", err)
-// 	}
-
-// 	avs := aptos.AccountAddress{}
-// 	err = avs.ParseStringRelaxed(agg.AvsAddress)
-// 	if err != nil {
-// 		return fmt.Errorf("error parsing avs address: %v", err)
-// 	}
-
-// 	var taskCount uint64
-// 	// looping
-// 	for {
-// 		previousTaskCount := taskCount
-// 		newTaskCount, err := LatestTaskCount(client, avs)
-// 		if err != nil {
-// 			agg.logger.Warn("Failed to subscribe to new tasks", zap.Any("err", err))
-// 			time.Sleep(RetryInterval)
-// 			continue
-// 		}
-// 		taskCount = newTaskCount
-
-// 		if taskCount > previousTaskCount {
-// 			err := agg.QueueTask(ctx, avs, client, previousTaskCount, taskCount)
-// 			if err != nil {
-// 				return fmt.Errorf("error queuing task: %v", err)
-// 			}
-// 		}
-// 		time.Sleep(30 * time.Second)
-// 	}
-// }
-
-// func (agg *Aggregator) QueueTask(ctx context.Context, avs aptos.AccountAddress, client *aptos.Client, start uint64, end uint64) error {
-// 	for i := start + 1; i <= end; i++ {
-// 		task, err := LoadTaskById(client, avs, i)
-// 		if err != nil {
-// 			return fmt.Errorf("error loading task: %v", err)
-// 		}
-// 		responded := task["responded"].(bool)
-// 		if responded {
-// 			continue
-// 		}
-// 		agg.logger.Info("Loaded new task with id: %d", zap.Any("task id", i))
-// 		fmt.Println("task :", task)
-// 		agg.TaskQueue <- Task{
-// 			Id:   i,
-// 			Task: task,
-// 		}
-// 		agg.TaskMutex.Lock()
-// 		if _, exists := agg.PendingTasks[i]; !exists {
-// 			agg.PendingTasks[i] = TaskInfo{
-// 				State:     task,
-// 				Responses: make([]SignedTaskResponse, 0),
-// 			}
-// 		}
-// 		agg.TaskMutex.Unlock()
-// 		agg.logger.Info("Queued new task with id: %d", zap.Any("task id", i))
-// 	}
-
-// 	return nil
-// }
-
-// func LoadTaskById(client *aptos.Client, contract aptos.AccountAddress, taskId uint64) (map[string]interface{}, error) {
-// 	taskIdBcs, err := bcs.SerializeU64(taskId)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("can not SerializeU64: %v", err)
-// 	}
-// 	payload := &aptos.ViewPayload{
-// 		Module: aptos.ModuleId{
-// 			Address: contract,
-// 			Name:    "service_manager",
-// 		},
-// 		Function: "task_by_id",
-// 		ArgTypes: []aptos.TypeTag{},
-// 		Args: [][]byte{
-// 			taskIdBcs,
-// 		},
-// 	}
-// 	vals, err := client.View(payload)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("can not get task count: %v", err)
-// 	}
-// 	task := vals[0].(map[string]interface{})
-// 	return task, nil
-// }
-
-// func LatestTaskCount(client *aptos.Client, contract aptos.AccountAddress) (uint64, error) {
-// 	payload := &aptos.ViewPayload{
-// 		Module: aptos.ModuleId{
-// 			Address: contract,
-// 			Name:    "service_manager",
-// 		},
-// 		Function: "task_count",
-// 		ArgTypes: []aptos.TypeTag{},
-// 		Args:     [][]byte{},
-// 	}
-
-// 	vals, err := client.View(payload)
-// 	if err != nil {
-// 		return 0, fmt.Errorf("can not get task count: %v", err)
-// 	}
-// 	countStr := vals[0].(string)
-
-// 	count, err := strconv.ParseUint(countStr, 10, 64) // base 10 and 64-bit size
-// 	if err != nil {
-// 		return 0, fmt.Errorf("error parsing task count: %s", err)
-// 	}
-// 	return uint64(count), nil
-// }

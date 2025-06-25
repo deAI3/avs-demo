@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 
-	"github.com/aptos-labs/aptos-go-sdk"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -43,11 +42,6 @@ func Start(logger *zap.Logger) *cobra.Command {
 		Short: "start",
 		Args:  cobra.ExactArgs(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Get all the flags
-			// network, err := cmd.Flags().GetString(flagAptosNetwork)
-			// if err != nil {
-			// 	return errors.Wrap(err, flagAptosNetwork)
-			// }
 			aggregatorConfigPath, err := cmd.Flags().GetString(flagAggregatorConfig)
 			if err != nil {
 				return errors.Wrap(err, flagAggregatorConfig)
@@ -58,24 +52,11 @@ func Start(logger *zap.Logger) *cobra.Command {
 				return fmt.Errorf("can not load aggregator config: %s", err)
 			}
 
-			// networkConfig, err := extractNetwork(network)
-			// if err != nil {
-			// 	return fmt.Errorf("wrong config: %s", err)
-			// }
-
 			aggregator, err := NewAggregator(*aggregatorConfig, logger)
 			if err != nil {
 				logger.Error("Cannot create aggregator", zap.Any("err", err))
 				return err
 			}
-
-			// // Listen for new task created in the ServiceManager contract in a separate goroutine
-			// go func() {
-			// 	listenErr := aggregator.SubscribeToNewTasks(networkConfig)
-			// 	if listenErr != nil {
-			// 		aggregator.logger.Fatal("Error subscribing for new tasks", zap.Any("err", listenErr))
-			// 	}
-			// }()
 
 			err = aggregator.Start(context.Background())
 			if err != nil {
@@ -83,7 +64,6 @@ func Start(logger *zap.Logger) *cobra.Command {
 				return err
 			}
 			return nil
-			// client.SubmitTransaction()
 		},
 	}
 	cmd.Flags().String(flagAggregatorConfig, "config/aggregator-config.json", "see the example at config/aggregator-example.json")
@@ -107,20 +87,10 @@ func CreateAggregatorConfig(logger *zap.Logger) *cobra.Command {
 				return errors.Wrap(err, flagAggregatorConfig)
 			}
 
-			// avsAddress := aptos.AccountAddress{}
-			// if err := avsAddress.ParseStringRelaxed(args[0]); err != nil {
-			// 	return fmt.Errorf("failed to parse avs address: %s", err)
-			// }
-
 			portAddr := args[1]
 			aggregatorConfig := AggregatorConfig{
 				ServerIpPortAddress: portAddr,
 				StorePath:           aggregatorStorePath,
-				// AvsAddress:          avsAddress.String(),
-				// AccountConfig: AccountConfig{
-				// 	AccountPath: aggregatorAccountPath,
-				// 	Profile:     "aggregator",
-				// },
 			}
 			bz, err := json.Marshal(aggregatorConfig)
 			if err != nil {
@@ -166,19 +136,4 @@ func loadAggregatorConfig(filename string) (*AggregatorConfig, error) {
 	}
 
 	return &config, nil
-}
-
-func extractNetwork(network string) (aptos.NetworkConfig, error) {
-	switch network {
-	case "devnet":
-		return aptos.DevnetConfig, nil
-	case "localnet":
-		return aptos.LocalnetConfig, nil
-	case "testnet":
-		return aptos.TestnetConfig, nil
-	case "mainnet":
-		return aptos.MainnetConfig, nil
-	default:
-		return aptos.NetworkConfig{}, fmt.Errorf("choose one of: mainnet, testnet, devnet, localnet")
-	}
 }
