@@ -1,6 +1,7 @@
 package aggregator
 
 import (
+	"avs/types/proto/socket"
 	"context"
 	"log"
 	"os"
@@ -13,11 +14,6 @@ import (
 const taskQueueSize = 100
 
 func NewAggregator(aggregatorConfig AggregatorConfig, logger *zap.Logger) (*Aggregator, error) {
-	// aggegator_account, err := SignerFromConfig(aggregatorConfig.AccountConfig.AccountPath, aggregatorConfig.AccountConfig.Profile)
-	// if err != nil {
-	// 	return &Aggregator{}, errors.Wrap(err, "Failed to create aggregator account")
-	// }
-
 	agg := Aggregator{
 		logger: logger,
 
@@ -42,7 +38,7 @@ func (agg *Aggregator) Start(ctx context.Context) error {
 		}
 	}()
 
-	// start api server and websocket
+	// start api server
 	go func() {
 		agg.logger.Info("api server process started...")
 
@@ -58,16 +54,31 @@ func (agg *Aggregator) Start(ctx context.Context) error {
 	// handle responds from nodes through the following steps:
 	//
 	// - emit event includes the repsonds to verifiers
-	// - wait for verifier results to update task state
-	// - when task reach finalized state, store results on state
 	go func() {
 		for {
-			for addr, conn := range agg.clients {
+			select {
+			case resp := <-agg.respondsChan:
+				for addr, stream := range agg.VoteClients {
+					if addr == resp.NodeAddress {
+						continue
+					}
+
+					// sending resps to all verifiers
+					stream.Send(resp)
+				}
+			}
+
+		}
+	}()
+
+	// handle votes
+	// update task
+	go func() {
+		for {
+			select {
+			case vote := <-agg.voteChan:
 
 			}
-			msg := <-agg.responsesRecv
-
-			// TODO: emit responses to verifier node
 
 		}
 	}()
@@ -77,11 +88,24 @@ func (agg *Aggregator) Start(ctx context.Context) error {
 	// - choose a propser node
 	// - emit event includes the task and propose node address
 	go func() {
-		agg.logger.Info("Fetching tasks process started...")
-		// err := agg.FetchTasks(ctx)
-		// if err != nil {
-		// 	agg.logger.Fatal("Error listening for tasks", zap.Any("err", err))
-		// }
+		agg.logger.Info("Distribute tasks process started...")
+		for {
+			select {
+			case msg := <-agg.TaskQueue:
+				stream := agg.TaskClients[msg.Proposer]
+				if err := stream.Send(&socket.TaskMessage{
+					NodeAddress: msg.Proposer,
+					Prompt:      msg.Task.Prompt,
+					Model:       msg.Task.Model,
+					TaskId:      msg.Id,
+				}); err != nil {
+					log.Println("send error:", err)
+				}
+			default:
+				log.Println("no pending task right now")
+			}
+		}
+
 	}()
 
 	sigChan := make(chan os.Signal, 1)
@@ -94,4 +118,25 @@ func (agg *Aggregator) Start(ctx context.Context) error {
 	cancel()
 
 	return nil
+}
+
+// pseudo proposer picking
+func (agg *Aggregator) PickProposer(taskId uint64) string {
+	var addr string
+	isEven := false
+
+	if taskId%2 == 0 {
+		isEven = true
+	}
+
+	for _, op := range agg.CurrentOperators {
+		if isEven {
+			addr = op.Pubkey
+			break
+		}
+
+		addr = op.Pubkey
+	}
+
+	return addr
 }

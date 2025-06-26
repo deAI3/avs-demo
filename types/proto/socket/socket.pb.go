@@ -209,7 +209,8 @@ func (x *TaskResponseMessage) GetModel() string {
 type ResponseVoteMessage struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Response      *TaskResponseMessage   `protobuf:"bytes,1,opt,name=response,proto3" json:"response,omitempty"`
-	Vote          Vote                   `protobuf:"varint,2,opt,name=vote,proto3,enum=avs.Vote" json:"vote,omitempty"`
+	NodeAddress   string                 `protobuf:"bytes,2,opt,name=node_address,json=nodeAddress,proto3" json:"node_address,omitempty"`
+	Vote          Vote                   `protobuf:"varint,3,opt,name=vote,proto3,enum=avs.Vote" json:"vote,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -251,6 +252,13 @@ func (x *ResponseVoteMessage) GetResponse() *TaskResponseMessage {
 	return nil
 }
 
+func (x *ResponseVoteMessage) GetNodeAddress() string {
+	if x != nil {
+		return x.NodeAddress
+	}
+	return ""
+}
+
 func (x *ResponseVoteMessage) GetVote() Vote {
 	if x != nil {
 		return x.Vote
@@ -272,10 +280,11 @@ const file_socket_proto_rawDesc = "" +
 	"\atask_id\x18\x01 \x01(\x04R\x06taskId\x12!\n" +
 	"\fnode_address\x18\x02 \x01(\tR\vnodeAddress\x12\x14\n" +
 	"\x05resps\x18\x03 \x03(\tR\x05resps\x12\x14\n" +
-	"\x05model\x18\x04 \x01(\tR\x05model\"j\n" +
+	"\x05model\x18\x04 \x01(\tR\x05model\"\x8d\x01\n" +
 	"\x13ResponseVoteMessage\x124\n" +
-	"\bresponse\x18\x01 \x01(\v2\x18.avs.TaskResponseMessageR\bresponse\x12\x1d\n" +
-	"\x04vote\x18\x02 \x01(\x0e2\t.avs.VoteR\x04vote*7\n" +
+	"\bresponse\x18\x01 \x01(\v2\x18.avs.TaskResponseMessageR\bresponse\x12!\n" +
+	"\fnode_address\x18\x02 \x01(\tR\vnodeAddress\x12\x1d\n" +
+	"\x04vote\x18\x03 \x01(\x0e2\t.avs.VoteR\x04vote*7\n" +
 	"\x04Vote\x12\x14\n" +
 	"\x10VOTE_UNSPECIFIED\x10\x00\x12\f\n" +
 	"\bVOTE_YES\x10\x01\x12\v\n" +
