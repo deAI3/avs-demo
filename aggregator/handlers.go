@@ -42,7 +42,7 @@ func (agg *Aggregator) ChatCompletions(c *gin.Context) {
 		Proposer:   agg.PickProposer(seq),
 		TaskConfig: TaskConfig{},
 		Task: TaskPayload{
-			State:         nil,
+			State:         WaitingForApply,
 			Prompt:        payload.Messages[0].Content,
 			Model:         payload.Model,
 			CurrentTokens: []string{},

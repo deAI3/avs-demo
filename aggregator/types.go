@@ -39,7 +39,6 @@ type Aggregator struct {
 	TaskMutex        sync.Mutex
 	OperatorMutex    sync.Mutex
 	FinishTasks      chan TaskInfo
-	CurrentTaskId    uint64
 
 	// stream
 	TaskClients map[string]socket.TaskService_TaskStreamServer // map node address to stream connection

@@ -189,12 +189,16 @@ func Deregister(logger *zap.Logger) *cobra.Command {
 				panic("Failed to create operator account:" + err.Error())
 			}
 
-			aggClient, err := NewAggregatorRpcClient(operatorConfig.AggregatorIpPortAddr)
+			operator, err := NewOperator(
+				logger,
+				*operatorConfig,
+				operatorConfig.BlsPrivateKey,
+			)
 			if err != nil {
-				return fmt.Errorf("can not create new aggregator Rpc Client: %v", err)
+				return fmt.Errorf("can not create new operator: %s", err)
 			}
 
-			aggClient.SendDeregisterOperatorRequest(operatorAccount.PubKey().Bytes())
+			operator.SendDeregisterOperatorRequest(operatorAccount.PubKey().Bytes())
 			return nil
 		},
 	}
@@ -210,15 +214,6 @@ func Start(logger *zap.Logger) *cobra.Command {
 		Short: "start",
 		Args:  cobra.ExactArgs(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Get all the flags
-			aptosPath, err := cmd.Flags().GetString(flagAptosConfigPath)
-			if err != nil {
-				return errors.Wrap(err, flagAptosConfigPath)
-			}
-			accountProfile, err := cmd.Flags().GetString(flagAccountProfile)
-			if err != nil {
-				return errors.Wrap(err, flagAccountProfile)
-			}
 			operatorConfigPath, err := cmd.Flags().GetString(flagAvsOperatorConfig)
 			if err != nil {
 				return errors.Wrap(err, flagAvsOperatorConfig)
@@ -232,10 +227,6 @@ func Start(logger *zap.Logger) *cobra.Command {
 			operator, err := NewOperator(
 				logger,
 				*operatorConfig,
-				AptosAccountConfig{
-					configPath: aptosPath,
-					profile:    accountProfile,
-				},
 				operatorConfig.BlsPrivateKey,
 			)
 			if err != nil {

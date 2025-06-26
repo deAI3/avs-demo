@@ -16,12 +16,9 @@ type AptosConfig struct {
 }
 
 type Profile struct {
-	// Network    string `yaml:"devnet"`
 	PrivateKey string `yaml:"private_key"`
 	PublicKey  string `yaml:"public_key"`
 	Account    string `yaml:"account"`
-	// RestURL    string `yaml:"rest_url"`
-	// FaucetURL  string `yaml:"faucet_url"`
 }
 
 func SignerFromConfig(path string, profile string) (*aptos.Account, error) {
