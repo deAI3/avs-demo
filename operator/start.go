@@ -36,13 +36,6 @@ func NewOperator(logger *zap.Logger, config OperatorConfig, accountConfig AptosA
 	// if !registered {
 	log.Println("Operator is not registered with A2D avs AVS, registering...")
 
-	quorumCount := QuorumCount(client, avsAddress)
-	if quorumCount == 0 {
-		panic("No quorum found, please initialize quorum first ")
-	}
-
-	quorumNumbers := quorumCount
-	fmt.Println("quorumNumbers:", quorumNumbers)
 	// Register Operator
 	// ignore error here because panic all the time
 	var priv crypto.BlsPrivateKey
@@ -95,122 +88,6 @@ func NewOperator(logger *zap.Logger, config OperatorConfig, accountConfig AptosA
 	}
 	return &operator, nil
 }
-
-// func InitQuorum(
-// 	networkConfig aptos.NetworkConfig,
-// 	config OperatorConfig,
-// 	accountConfig AptosAccountConfig,
-// 	maxOperatorCount uint32,
-// 	minimumStake big.Int,
-// ) error {
-// 	client, err := aptos.NewClient(networkConfig)
-// 	if err != nil {
-// 		panic("Failed to create client:" + err.Error())
-// 	}
-
-// 	accAddress := aptos.AccountAddress{}
-// 	err = accAddress.ParseStringRelaxed("0x603053371d0eec6befaf41489f506b7b3e8e31dbca3d9b9c5cb92bb308dc2eec")
-// 	if err != nil {
-// 		panic("Failed to parse account address " + err.Error())
-// 	}
-
-// 	operatorAccount, err := SignerFromConfig(accountConfig.configPath, accountConfig.profile)
-// 	if err != nil {
-// 		panic("Failed to create operator account:" + err.Error())
-// 	}
-
-// 	maxOperatorCountBz, err := bcs.SerializeU32(maxOperatorCount)
-// 	if err != nil {
-// 		return fmt.Errorf("failed to serialize maxOperatorCount: %s", err)
-// 	}
-
-// 	minimumStakeBz, err := bcs.SerializeU128(minimumStake)
-// 	if err != nil {
-// 		return fmt.Errorf("failed to serialize minimumStake: %s", err)
-// 	}
-
-// 	metadataAddr := GetMetadata(client).Inner
-
-// 	strategiesSerializer := &bcs.Serializer{}
-// 	bcs.SerializeSequence([]aptos.AccountAddress{metadataAddr}, strategiesSerializer)
-
-// 	multiplier := new(big.Int)
-// 	multiplier.SetString("10000000", 10)
-
-// 	multipliersSerializer := &bcs.Serializer{}
-// 	bcs.SerializeSequence([]U128Struct{{
-// 		Value: multiplier,
-// 	}}, multipliersSerializer)
-
-// 	// Get operator Status
-// 	avsAddress := aptos.AccountAddress{}
-// 	if err := avsAddress.ParseStringRelaxed(config.AvsAddress); err != nil {
-// 		panic("Failed to parse avsAddress:" + err.Error())
-// 	}
-
-// 	payload := aptos.EntryFunction{
-// 		Module: aptos.ModuleId{
-// 			Address: avsAddress,
-// 			Name:    "registry_coordinator",
-// 		},
-// 		Function: "create_quorum",
-// 		ArgTypes: []aptos.TypeTag{},
-// 		Args: [][]byte{
-// 			maxOperatorCountBz, minimumStakeBz, strategiesSerializer.ToBytes(), multipliersSerializer.ToBytes(),
-// 		},
-// 	}
-// 	// Build transaction
-// 	rawTxn, err := client.BuildTransaction(operatorAccount.AccountAddress(),
-// 		aptos.TransactionPayload{Payload: &payload})
-// 	if err != nil {
-// 		panic("Failed to build transaction:" + err.Error())
-// 	}
-
-// 	// Sign transaction
-// 	signedTxn, err := rawTxn.SignedTransaction(operatorAccount)
-// 	if err != nil {
-// 		panic("Failed to sign transaction:" + err.Error())
-// 	}
-// 	fmt.Printf("Submit register operator for %s\n", operatorAccount.AccountAddress())
-
-// 	// Submit and wait for it to complete
-// 	submitResult, err := client.SubmitTransaction(signedTxn)
-// 	if err != nil {
-// 		panic("Failed to submit transaction:" + err.Error())
-// 	}
-// 	txnHash := submitResult.Hash
-
-// 	// Wait for the transaction
-// 	fmt.Printf("And we wait for the transaction %s to complete...\n", txnHash)
-// 	userTxn, err := client.WaitForTransaction(txnHash)
-// 	if err != nil {
-// 		panic("Failed to wait for transaction:" + err.Error())
-// 	}
-// 	fmt.Printf("The transaction completed with hash: %s and version %d\n", userTxn.Hash, userTxn.Version)
-// 	if !userTxn.Success {
-// 		// TODO: log something more
-// 		panic("Failed to create quorum")
-// 	}
-// 	return nil
-// }
-// func QuorumCount(client *aptos.Client, contract aptos.AccountAddress) uint8 {
-// 	payload := &aptos.ViewPayload{
-// 		Module: aptos.ModuleId{
-// 			Address: contract,
-// 			Name:    "registry_coordinator",
-// 		},
-// 		Function: "quorum_count",
-// 		ArgTypes: []aptos.TypeTag{},
-// 		Args:     [][]byte{},
-// 	}
-
-// 	vals, err := client.View(payload)
-// 	if err != nil {
-// 		panic("Could not get quorum count:" + err.Error())
-// 	}
-// 	count := vals[0].(float64)
-// 	return uint8(count)
-// }
 
 func IsOperatorRegistered(client *aptos.Client, contract aptos.AccountAddress, operator_addr string) bool {
 	account := aptos.AccountAddress{}

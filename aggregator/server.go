@@ -79,7 +79,6 @@ func (agg *Aggregator) HandleOperatorDeregister(pubkey []byte, reply *uint8) err
 }
 
 // Define the RespondTask method for handling incoming RPC calls
-// TODO update here
 func (agg *Aggregator) RespondTask(signedTaskResponse SignedTaskResponse, reply *uint8) error {
 	agg.logger.Info("Received signed task response", zap.Any("response", signedTaskResponse))
 
@@ -193,7 +192,6 @@ func (agg *Aggregator) processOperatorDeregisterRequest(pubkey []byte) error {
 	return fmt.Errorf("operator with pubkey %s not found", pubkey)
 }
 
-// TODO update here
 func (agg *Aggregator) processTaskResponse(signedTaskResponse SignedTaskResponse) error {
 	var err error
 	agg.TaskMutex.Lock()
