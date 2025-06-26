@@ -4,8 +4,9 @@ import (
 	"sync"
 	"time"
 
-	// aptos "github.com/aptos-labs/aptos-go-sdk"
 	"go.uber.org/zap"
+
+	"avs/types/proto/socket"
 )
 
 type TaskState uint8
@@ -20,27 +21,33 @@ const (
 type AggregatorConfig struct {
 	ServerIpPortAddress string
 	StorePath           string
-	// AvsAddress          string
-	// AccountConfig AccountConfig
 }
 
-// type AccountConfig struct {
-// 	AccountPath string // store path
-// 	Profile     string
-// }
+type TaskContext struct {
+	TaskMutex sync.Mutex
+	Task      TaskInfo
+}
 
 type Aggregator struct {
 	logger *zap.Logger
-	// AvsAddress        string
-	// AggregatorAccount aptos.Account
+
 	AggregatorConfig AggregatorConfig
 	TaskQueue        chan TaskInfo
 	PendingTasks     []TaskInfo
 	CurrentTaskId    uint64
 	CurrentOperators []Operator
-	TaskMutex        sync.Mutex
-	OperatorMutex    sync.Mutex
-	// Network           aptos.NetworkConfig
+	OperatorsQueue   []Operator
+
+	TaskMutex     sync.Mutex
+	OperatorMutex sync.Mutex
+
+	// stream
+	TaskClients map[string]chan socket.TaskMessage         // map node address to stream connection
+	VoteClients map[string]chan socket.TaskResponseMessage // map node address to stream connection
+
+	// general channel
+	respondsChan chan socket.TaskResponseMessage
+	voteChan     chan socket.ResponseVoteMessage
 }
 
 type TaskInfo struct {
@@ -48,13 +55,6 @@ type TaskInfo struct {
 	TaskConfig      TaskConfig
 	Task            TaskPayload
 	TaskCreatedTime time.Time
-}
-
-type SignedTaskResponse struct {
-	TaskId    uint64
-	Pubkey    []byte
-	Signature []byte
-	Response  []string
 }
 
 type Operator struct {
@@ -70,17 +70,16 @@ type TaskConfig struct {
 }
 
 type TaskPayload struct {
-	State         TaskState
-	Prompt        string
-	CurrentTokens []string
-	TempResult    *TempResultData
-	FinalResult   *FinalResultData
+	State            TaskState
+	Prompt           string
+	CurrentTokens    []string
+	AppliedOperators [][]byte // Public keys of operators who applied to the task]
+	TempResult       *TempResultData
+	FinalResult      *FinalResultData
 }
 
 type TempResultData struct {
-	CurrentStep            uint64
-	Steps                  []InferenceStep
-	NextStepExpirationTime time.Time
+	InferenceStep InferenceStep
 }
 
 type FinalResultData struct {
@@ -91,59 +90,63 @@ type FinalResultData struct {
 }
 
 type InferenceStep struct {
-	Step              uint64
-	Tokens            []string
-	Finalized         bool
-	Generators        [][]byte // List of generators' public keys
-	Validators        [][]byte // List of validators' public keys
-	GeneratorResults  [][]string
+	// Tokens            []string
+	// Finalized         bool
+	Generators        [][]byte          // List of generators' public keys
+	Validators        [][]byte          // List of validators' public keys
+	GeneratorResults  map[uint64]string // Map of generator index to their results
 	VerificationVotes []VerificationVote
-	ChoseGenerator    []byte // Public key of the chosen generator
+	// ChoseGenerator    []byte // Public key of the chosen generator
 }
 
 type VerificationVote struct {
-	Tokens         []string
+	Tokens         string
 	OperatorPubkey []byte
 	Signature      []byte
 	TimeStamp      time.Time
 }
 
-// type U128Struct struct {
-// 	Value *big.Int `json:"value"`
-// }
+type SignedTaskResponse struct {
+	TaskId         uint64
+	ApplyTask      *ApplyTaskResponse
+	IsGenerator    bool
+	GenerateAnswer *GenerateAnswerResponse
+	VerifyAnswer   *VerifyAnswerResponse
+	Pubkey         []byte
+}
 
-// func (u *U128Struct) MarshalBCS(ser *bcs.Serializer) {
-// 	ser.U128(*u.Value)
-// }
+type ApplyTaskResponse struct {
+	Signature []byte
+}
 
-// type BytesStruct struct {
-// 	Value []byte
-// }
+type GenerateAnswerResponse struct {
+	Signature []byte
+	Response  string
+}
 
-// func (b *BytesStruct) MarshalBCS(ser *bcs.Serializer) {
-// 	ser.WriteBytes(b.Value)
-// }
+type VerifyAnswerResponse struct {
+}
 
-// type U8Struct struct {
-// 	Value uint8
-// }
+// chat completions api
+type ChatMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
 
-// func (u *U8Struct) MarshalBCS(ser *bcs.Serializer) {
-// 	ser.U8(u.Value)
-// }
+type ChatCompletionRequest struct {
+	Model    string        `json:"model"`
+	Messages []ChatMessage `json:"messages"`
+	Stream   bool          `json:"stream"`
+}
 
-// type VecAddr struct {
-// 	Value []aptos.AccountAddress
-// }
-
-// func (v *VecAddr) MarshalBCS(ser *bcs.Serializer) {
-// 	bcs.SerializeSequence(v.Value, ser)
-// }
-
-// type Addr struct {
-// 	Value aptos.AccountAddress
-// }
-
-// func (v *Addr) MarshalBCS(ser *bcs.Serializer) {
-// 	v.Value.MarshalBCS(ser)
-// }
+type ChatCompletionResponse struct {
+	ID      string `json:"id"`
+	Object  string `json:"object"`
+	Created int64  `json:"created"`
+	Model   string `json:"model"`
+	Choices []struct {
+		Index        int         `json:"index"`
+		Message      ChatMessage `json:"message"`
+		FinishReason string      `json:"finish_reason"`
+	} `json:"choices"`
+}

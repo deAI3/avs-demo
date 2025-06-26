@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package avs;
+
+option go_package = "proto/socket";
+
+service TaskService {
+    rpc TaskStream(stream TaskResponseMessage) returns (stream TaskMessage);
+    rpc VoteStream(stream ResponseVoteMessage) returns (stream TaskResponseMessage);
+}
+
+message TaskMessage {
+    string node_address = 1;
+    string prompt = 2;
+    string model = 3;
+    uint64 task_id = 4;
+}
+
+message TaskResponseMessage {
+    uint64 task_id = 1;
+    string node_address = 2;
+    repeated string resps = 3;
+    string model = 4;
+}
+
+message ResponseVoteMessage {
+    TaskResponseMessage response = 1;
+    Vote vote = 2;
+}
+
+enum Vote {
+    VOTE_UNSPECIFIED = 0;
+    VOTE_YES = 1;
+    VOTE_NO = 2; 
+}
