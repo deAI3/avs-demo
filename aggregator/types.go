@@ -39,6 +39,7 @@ type Aggregator struct {
 	TaskMutex        sync.Mutex
 	OperatorMutex    sync.Mutex
 	FinishTasks      chan TaskInfo
+	CurrentTaskId    uint64
 
 	// stream
 	TaskClients map[string]socket.TaskService_TaskStreamServer // map node address to stream connection
@@ -72,18 +73,17 @@ type TaskConfig struct {
 }
 
 type TaskPayload struct {
-	State         TaskState
-	Prompt        string
-	Model         string
-	CurrentTokens []string
-	TempResult    *TempResultData
-	FinalResult   *FinalResultData
+	State            TaskState
+	Prompt           string
+	Model            string
+	CurrentTokens    []string
+	AppliedOperators [][]byte // Public keys of operators who applied to the task]
+	TempResult       *TempResultData
+	FinalResult      *FinalResultData
 }
 
 type TempResultData struct {
-	CurrentStep            uint64
-	Steps                  []InferenceStep
-	NextStepExpirationTime time.Time
+	InferenceStep InferenceStep
 }
 
 type FinalResultData struct {
@@ -94,21 +94,41 @@ type FinalResultData struct {
 }
 
 type InferenceStep struct {
-	Step              uint64
-	Tokens            []string
-	Finalized         bool
-	Generators        [][]byte // List of generators' public keys
-	Validators        [][]byte // List of validators' public keys
-	GeneratorResults  [][]string
+	// Tokens            []string
+	// Finalized         bool
+	Generators        [][]byte          // List of generators' public keys
+	Validators        [][]byte          // List of validators' public keys
+	GeneratorResults  map[uint64]string // Map of generator index to their results
 	VerificationVotes []VerificationVote
-	ChoseGenerator    []byte // Public key of the chosen generator
+	// ChoseGenerator    []byte // Public key of the chosen generator
 }
 
 type VerificationVote struct {
-	Tokens         []string
+	Tokens         string
 	OperatorPubkey []byte
 	Signature      []byte
 	TimeStamp      time.Time
+}
+
+type SignedTaskResponse struct {
+	TaskId         uint64
+	ApplyTask      *ApplyTaskResponse
+	IsGenerator    bool
+	GenerateAnswer *GenerateAnswerResponse
+	VerifyAnswer   *VerifyAnswerResponse
+	Pubkey         []byte
+}
+
+type ApplyTaskResponse struct {
+	Signature []byte
+}
+
+type GenerateAnswerResponse struct {
+	Signature []byte
+	Response  string
+}
+
+type VerifyAnswerResponse struct {
 }
 
 // chat completions api

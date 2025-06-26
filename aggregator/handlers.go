@@ -36,7 +36,8 @@ func (agg *Aggregator) ChatCompletions(c *gin.Context) {
 
 	// insert task to queue
 	agg.TaskMutex.Lock()
-	agg.TaskQueue <- TaskInfo{
+
+	taskInfo := TaskInfo{
 		Id:         seq,
 		Proposer:   agg.PickProposer(seq),
 		TaskConfig: TaskConfig{},
@@ -51,13 +52,17 @@ func (agg *Aggregator) ChatCompletions(c *gin.Context) {
 		TaskCreatedTime: createdTime,
 		ExpiredTime:     expiredTime,
 	}
+
+	agg.TaskQueue <- taskInfo
 	agg.TaskMutex.Unlock()
 
 	// wait for the result
 	for {
+		// if timeout add to pending and retry later on
 		if time.Now().After(expiredTime) {
+			agg.PendingTasks[seq] = taskInfo
 			c.JSON(http.StatusRequestTimeout, ErrorResponse{
-				Message: "request expired",
+				Message: "request expired, our operators might need more time for this request",
 			})
 			return
 		}

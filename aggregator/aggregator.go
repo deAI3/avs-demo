@@ -20,7 +20,8 @@ func NewAggregator(aggregatorConfig AggregatorConfig, logger *zap.Logger) (*Aggr
 		AggregatorConfig: aggregatorConfig,
 		TaskQueue:        make(chan TaskInfo, taskQueueSize),
 		PendingTasks:     make(map[uint64]TaskInfo),
-		taskSequence:     0,
+		CurrentTaskId:    0,
+		// Network: network,
 	}
 	return &agg, nil
 }
