@@ -27,7 +27,7 @@ func NewAggregator(aggregatorConfig AggregatorConfig, logger *zap.Logger) (*Aggr
 		AggregatorConfig: aggregatorConfig,
 		TaskQueue:        make(chan TaskInfo, taskQueueSize),
 		PendingTasks:     []TaskInfo{},
-
+		CurrentTaskId:    0,
 		// Network: network,
 	}
 	return &agg, nil
@@ -45,7 +45,6 @@ func (agg *Aggregator) Start(ctx context.Context) error {
 			agg.logger.Fatal("Error starting RPC server", zap.Any("err", err))
 		}
 	}()
-	
 
 	go func() {
 		agg.logger.Info("Fetching tasks process started...")

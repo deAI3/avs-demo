@@ -35,6 +35,7 @@ type Task struct {
 type AggregatorRpcClient struct {
 	rpcClient            *rpc.Client
 	aggregatorIpPortAddr string
+	
 }
 
 type OperatorConfig struct {

@@ -36,6 +36,7 @@ type Aggregator struct {
 	AggregatorConfig AggregatorConfig
 	TaskQueue        chan TaskInfo
 	PendingTasks     []TaskInfo
+	CurrentTaskId    uint64
 	CurrentOperators []Operator
 	TaskMutex        sync.Mutex
 	OperatorMutex    sync.Mutex
@@ -59,6 +60,7 @@ type SignedTaskResponse struct {
 type Operator struct {
 	Pubkey []byte
 	Stake  uint64
+	Models []string
 }
 
 type TaskConfig struct {

@@ -61,12 +61,7 @@ func (op *Operator) Start(ctx context.Context) error {
 	return nil
 }
 
-func (op *Operator) FetchTasks(ctx context.Context) error {
-	client, err := aptos.NewClient(op.network)
-	if err != nil {
-		return fmt.Errorf("failed to create aptos client: %v", err)
-	}
-
+func (op *Operator) FetchTasks() error {
 	var taskCount uint64
 	// looping
 	for {
@@ -212,7 +207,7 @@ func LoadTaskById(client *aptos.Client, contract aptos.AccountAddress, taskId ui
 	return task, nil
 }
 
-func LatestTaskCount(client *aptos.Client, contract aptos.AccountAddress) (uint64, error) {
+func LatestTaskCount() (uint64, error) {
 	payload := &aptos.ViewPayload{
 		Module: aptos.ModuleId{
 			Address: contract,
