@@ -1,21 +1,15 @@
 package operator
 
 import (
-	"avs/aggregator"
 	"avs/types/proto/socket"
 	"context"
-	"encoding/hex"
-	"fmt"
 	"io"
 	"log"
-	"math/big"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
-	"github.com/aptos-labs/aptos-go-sdk/crypto"
 	"go.uber.org/zap"
 )
 
@@ -36,16 +30,32 @@ func (op *Operator) Start(ctx context.Context) error {
 	// Fetching tasks
 	go func() {
 		op.logger.Info("Fetching tasks process started...")
-		op.FetchTasks()
-		// get tasks from channel
+
+		for {
+			task, err := op.TaskStream.Recv()
+			if err == io.EOF {
+				log.Println("Stream closed by server")
+			}
+			if err != nil {
+				log.Fatalf("Stream recv error: %v", err)
+
+			}
+
+			op.TaskQueue <- Task{
+				Id:   task.TaskId,
+				Task: make(map[string]interface{}),
+			}
+		}
 	}()
 
+	// respond tasks
 	go func() {
+
 		op.logger.Info("Respond tasks process started...")
 		for {
 			select {
 			case task := <-op.TaskQueue:
-				// send responds to server
+				// send responses to server
 				op.RespondTask(task)
 			default:
 				op.logger.Info("waiting for task")
@@ -54,22 +64,34 @@ func (op *Operator) Start(ctx context.Context) error {
 		}
 	}()
 
+	// fetch responses
 	go func() {
-		op.logger.Info("fetch responds process started...")
-		op.FetchTasks()
+		op.logger.Info("fetch responses process started...")
+		for {
+			resp, err := op.VoteStream.Recv()
+			if err == io.EOF {
+				log.Println("Stream closed by server")
+			}
+			if err != nil {
+				log.Fatalf("Stream recv error: %v", err)
+
+			}
+
+			op.ResponseQueue <- resp
+		}
 	}()
 
+	// vote
 	go func() {
-		op.logger.Info("verify responds process started...")
+		op.logger.Info("verify responses process started...")
 		for {
 			select {
 			case resp := <-op.ResponseQueue:
-				// send responds to server
+				// send responses to server
 				op.VerifyResponse(resp)
 			default:
-				op.logger.Info("waiting for task")
+				op.logger.Info("waiting for response")
 			}
-
 		}
 	}()
 
@@ -84,84 +106,16 @@ func (op *Operator) Start(ctx context.Context) error {
 	return nil
 }
 
-func (op *Operator) FetchTasks() {
-	// Receive tasks
-	for {
-		task, err := op.TaskStream.Recv()
-		if err == io.EOF {
-			log.Println("Stream closed by server")
-		}
-		if err != nil {
-			log.Fatalf("Stream recv error: %v", err)
-
-		}
-
-		op.TaskQueue <- Task{
-			Id:   task.TaskId,
-			Task: make(map[string]interface{}),
-		}
-	}
-}
-
-// TODO: update here
 func (op *Operator) RespondTask(task Task) error {
-	denom := task.Task["data_request"].(string)
-	upperDenom := strings.ToUpper(denom)
-	taskId := task.Id
+	// TODO: handle task here
 
-	price := big.NewInt(int64(getCMCPrice(upperDenom) * 1000000))
-
-	msghHash, err := GetMsgHash(client, op.avsAddress, taskId, *price)
-	if err != nil {
-		return fmt.Errorf("failed to GetMsgHash: %v", err)
-	}
-
-	trimmedMsgHash := strings.TrimPrefix(msghHash, "0x")
-	bytesMsgHash, err := hex.DecodeString(trimmedMsgHash)
-	if err != nil {
-		return fmt.Errorf("failed to decode hex to string: %v", err)
-	}
-
-	var priv crypto.BlsPrivateKey
-	err = priv.FromBytes(op.BlsPrivateKey)
-	if err != nil {
-		panic("Failed to create bls priv key" + err.Error())
-	}
-	signature, err := priv.Sign(bytesMsgHash)
-	if err != nil {
-		panic("Failed to create signature" + err.Error())
-	}
-
-	// pubKey, err := priv.GeneratePubkey()
-	// if err != nil {
-	// 	panic("Failed to generate pubkey from privkey" + err.Error())
-	// }
-
-	op.AggRpcClient.SendSignedTaskResponseToAggregator(aggregator.SignedTaskResponse{
-		TaskId:    taskId,
-		Pubkey:    signature.Auth.PublicKey().Bytes(),
-		Signature: signature.Auth.Signature().Bytes(),
-		Response:  price,
-	})
-	return nil
+	// then send the response chunks here
+	return op.TaskStream.Send()
 }
 
-func (op *Operator) FetchResponse() {
-	// Receive resp
-	for {
-		resp, err := op.VoteStream.Recv()
-		if err == io.EOF {
-			log.Println("Stream closed by server")
-		}
-		if err != nil {
-			log.Fatalf("Stream recv error: %v", err)
+func (op *Operator) VerifyResponse(resp *socket.TaskResponseMessage) error {
+	// TODO: handle verify here
 
-		}
-
-		op.ResponseQueue <- resp
-	}
-}
-
-func (op *Operator) VerifyResponse(resp *socket.TaskResponseMessage) {
-
+	// then send the vote here
+	return op.VoteStream.Send()
 }

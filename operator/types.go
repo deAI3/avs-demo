@@ -1,7 +1,6 @@
 package operator
 
 import (
-	pb "avs/types/proto/aggregator"
 	"avs/types/proto/socket"
 
 	aptos "github.com/aptos-labs/aptos-go-sdk"
@@ -18,11 +17,10 @@ type Config struct {
 type Operator struct {
 	logger *zap.Logger
 
-	BlsPrivateKey         []byte
-	TaskStream            socket.TaskService_TaskStreamClient
-	VoteStream            socket.TaskService_VoteStreamClient
-	OperatorServiceClient pb.OperatorServiceClient
-	AggRpcClient          AggregatorRpcClient
+	BlsPrivateKey []byte
+	TaskStream    socket.TaskService_TaskStreamClient
+	VoteStream    socket.TaskService_VoteStreamClient
+	AggRpcClient  AggregatorRpcClient
 	// network      aptos.NetworkConfig
 	TaskQueue     chan Task
 	ResponseQueue chan *socket.TaskResponseMessage
