@@ -2,6 +2,8 @@ package operator
 
 import (
 	"avs/aggregator"
+	pb "avs/types/proto/aggregator"
+
 	"fmt"
 	"net/rpc"
 	"time"
@@ -48,7 +50,7 @@ func (c *AggregatorRpcClient) SendSignedTaskResponseToAggregator(signedTaskRespo
 	}
 }
 
-func (c *AggregatorRpcClient) SendRegisterOperatorRequest(request aggregator.Operator) {
+func (c *AggregatorRpcClient) SendRegisterOperatorRequest(request *pb.Operator) {
 	var reply uint8
 	for retries := 0; retries < MaxRetries; retries++ {
 		err := c.rpcClient.Call("Aggregator.HandleOperatorRegister", request, &reply)

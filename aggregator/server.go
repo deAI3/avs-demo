@@ -1,20 +1,24 @@
 package aggregator
 
 import (
-	"avs/types/proto/socket"
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	"net/http"
-	"net/rpc"
+	"log"
+	"net"
 	"os"
 	"time"
 
 	"path/filepath"
 
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
+
+	pb "avs/types/proto/aggregator"
+	"avs/types/proto/socket"
 )
 
 const (
@@ -23,59 +27,59 @@ const (
 )
 
 func (agg *Aggregator) ServeOperators() error {
-	// Registers a new RPC server
-	err := rpc.Register(agg)
+	grpcAddr := ":50051"
+	lis, err := net.Listen("tcp", grpcAddr)
 	if err != nil {
-		return err
+		log.Fatal("failed to listen:", err)
 	}
 
-	// Registers an HTTP handler for RPC messages
-	rpc.HandleHTTP()
+	server := grpc.NewServer()
 
-	agg.logger.Info("Starting RPC server on address:", zap.String("address", agg.AggregatorConfig.ServerIpPortAddress))
+	pb.RegisterOperatorServiceServer(server, agg)
+	socket.RegisterTaskServiceServer(server, agg)
 
-	err = http.ListenAndServe(agg.AggregatorConfig.ServerIpPortAddress, nil)
-	if err != nil {
-		return err
+	log.Println("gRPC server started on", grpcAddr)
+	if err := server.Serve(lis); err != nil {
+		log.Fatal("gRPC server error:", err)
 	}
 
 	return nil
 }
 
-func (agg *Aggregator) HandleOperatorRegister(operator Operator, reply *uint8) error {
+func (agg *Aggregator) RegisterOperator(ctx context.Context, req *pb.RegisterRequest) (*pb.RegisterRespond, error) {
 	agg.logger.Info("Received operators request")
 
-	if err := agg.processOperatorRegisterRequest(operator); err != nil {
+	if err := agg.processOperatorRegisterRequest(req.Operator); err != nil {
 		agg.logger.Error("Failed to process operator register request", zap.Error(err))
-		return fmt.Errorf("failed to process operator register request: %v", err)
+		return &pb.RegisterRespond{
+			Respond: "failed",
+		}, fmt.Errorf("failed to process operator register request: %v", err)
 	}
-	// establish a stream channel
-	agg.TaskClients[string(operator.Pubkey)] = make(chan socket.TaskMessage, 10)
-	agg.VoteClients[string(operator.Pubkey)] = make(chan socket.TaskResponseMessage, 10)
 
-	// Set reply to indicate success (e.g., 0 = success)
-	*reply = 0
-
-	agg.logger.Info("Successfully processed operator register request", zap.Any("operator", operator))
-	return nil
+	agg.logger.Info("Successfully processed operator register request", zap.Any("operator", req.Operator))
+	return &pb.RegisterRespond{
+		Respond: "success",
+	}, nil
 }
 
-func (agg *Aggregator) HandleOperatorDeregister(pubkey []byte, reply *uint8) error {
-	agg.logger.Info("Received operator deregister request", zap.ByteString("pubkey", pubkey))
+func (agg *Aggregator) DeregisterOperator(ctx context.Context, req *pb.DeregisterRequest) (*pb.DeregisterRespond, error) {
+	agg.logger.Info("Received operator deregister request", zap.String("pubkey", req.Pubkey))
 
-	if err := agg.processOperatorDeregisterRequest(pubkey); err != nil {
+	if err := agg.processOperatorDeregisterRequest([]byte(req.Pubkey)); err != nil {
 		agg.logger.Error("Failed to process operator deregister request", zap.Error(err))
-		return fmt.Errorf("failed to process operator deregister request: %v", err)
+		return &pb.DeregisterRespond{
+			Respond: "failed",
+		}, fmt.Errorf("failed to process operator deregister request: %v", err)
 	}
 
 	// remove stream channel
-	delete(agg.TaskClients, string(pubkey))
-	delete(agg.VoteClients, string(pubkey))
+	delete(agg.TaskClients, req.Pubkey)
+	delete(agg.VoteClients, req.Pubkey)
 
-	// Set reply to indicate success (e.g., 0 = success)
-	*reply = 0
-	agg.logger.Info("Successfully processed operator deregister request", zap.ByteString("pubkey", pubkey))
-	return nil
+	agg.logger.Info("Successfully processed operator deregister request", zap.String("pubkey", req.Pubkey))
+	return &pb.DeregisterRespond{
+		Respond: "success",
+	}, nil
 }
 
 // Define the RespondTask method for handling incoming RPC calls
@@ -94,10 +98,10 @@ func (agg *Aggregator) RespondTask(signedTaskResponse SignedTaskResponse, reply 
 	return nil
 }
 
-func (agg *Aggregator) processOperatorRegisterRequest(operator Operator) error {
+func (agg *Aggregator) processOperatorRegisterRequest(operator *pb.Operator) error {
 	agg.OperatorMutex.Lock()
 
-	var operators map[string]Operator
+	var operators map[string]*pb.Operator
 	storePath := filepath.Join(agg.AggregatorConfig.StorePath, "operators.json")
 	if _, err := os.Stat(storePath); err == nil {
 		data, err := os.ReadFile(storePath)
@@ -124,11 +128,7 @@ func (agg *Aggregator) processOperatorRegisterRequest(operator Operator) error {
 
 	// Add the new operator to the list
 	operators[string(operator.Pubkey)] = operator
-	currentOperators := make([]Operator, 0, len(operators))
-	for _, op := range operators {
-		currentOperators = append(currentOperators, op)
-	}
-	agg.CurrentOperators = currentOperators
+	agg.CurrentOperators = operators
 	agg.OperatorMutex.Unlock()
 	bz, err := json.Marshal(operators)
 	if err != nil {
@@ -146,7 +146,7 @@ func (agg *Aggregator) processOperatorDeregisterRequest(pubkey []byte) error {
 	agg.OperatorMutex.Lock()
 
 	storePath := filepath.Join(agg.AggregatorConfig.StorePath, "operators.json")
-	var operators map[string]Operator
+	var operators map[string]*pb.Operator
 	if _, err := os.Stat(storePath); err == nil {
 		data, err := os.ReadFile(storePath)
 		if err != nil {
@@ -167,12 +167,7 @@ func (agg *Aggregator) processOperatorDeregisterRequest(pubkey []byte) error {
 	// Find and remove the operator with the given pubkey
 	if _, has := operators[string(pubkey)]; has {
 		delete(operators, string(pubkey))
-		currentOperators := make([]Operator, 0, len(operators))
-		for _, op := range operators {
-			currentOperators = append(currentOperators, op)
-		}
-
-		agg.CurrentOperators = currentOperators
+		agg.CurrentOperators = operators
 		bz, err := json.Marshal(operators)
 		if err != nil {
 			agg.OperatorMutex.Unlock()
@@ -377,4 +372,42 @@ func CheckSignatures(
 ) error {
 
 	return nil
+}
+
+// establish stream for node operator and handle receive message flow
+func (agg *Aggregator) TaskStream(stream socket.TaskService_TaskStreamServer) error {
+	for {
+		msg, err := stream.Recv()
+		if err != nil {
+			log.Println("client recv error:", err)
+			return err
+		}
+
+		if _, has := agg.TaskClients[msg.NodeAddress]; !has {
+			// establish a stream channel
+			agg.TaskClients[msg.NodeAddress] = stream
+		}
+
+		// add respond to chan
+		agg.respondsChan <- msg
+	}
+}
+
+// establish stream for node operator and handle receive message flow
+func (agg *Aggregator) VoteStream(stream socket.TaskService_VoteStreamServer) (err error) {
+	for {
+		msg, err := stream.Recv()
+		if err != nil {
+			log.Println("client recv error:", err)
+			return err
+		}
+
+		if _, has := agg.TaskClients[msg.NodeAddress]; !has {
+			// establish a stream channel
+			agg.VoteClients[msg.NodeAddress] = stream
+		}
+
+		// add respond to chan
+		agg.voteChan <- msg
+	}
 }

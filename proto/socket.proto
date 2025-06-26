@@ -25,7 +25,8 @@ message TaskResponseMessage {
 
 message ResponseVoteMessage {
     TaskResponseMessage response = 1;
-    Vote vote = 2;
+    string node_address = 2;
+    Vote vote = 3;
 }
 
 enum Vote {

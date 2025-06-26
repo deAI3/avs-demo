@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package avs;
+
+option go_package = "proto/aggregator";
+
+
+service OperatorService {
+    rpc RegisterOperator(RegisterRequest) returns (RegisterRespond);
+    rpc DeregisterOperator(DeregisterRequest) returns (DeregisterRespond);
+}
+
+message RegisterRequest {
+    Operator operator = 1;
+}
+
+message RegisterRespond {
+    string respond = 1;
+}
+
+message DeregisterRequest {
+    string pubkey = 1;
+}
+
+message DeregisterRespond {
+    string respond = 1;
+}
+
+message Operator {
+    string Pubkey = 1;
+	uint64 Stake = 2;
+	repeated string models = 3;
+}

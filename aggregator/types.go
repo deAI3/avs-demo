@@ -6,6 +6,7 @@ import (
 
 	"go.uber.org/zap"
 
+	pb "avs/types/proto/aggregator"
 	"avs/types/proto/socket"
 )
 
@@ -33,34 +34,36 @@ type Aggregator struct {
 
 	AggregatorConfig AggregatorConfig
 	TaskQueue        chan TaskInfo
-	PendingTasks     []TaskInfo
+	PendingTasks     map[uint64]TaskInfo
 	CurrentTaskId    uint64
-	CurrentOperators []Operator
-	OperatorsQueue   []Operator
-
-	TaskMutex     sync.Mutex
-	OperatorMutex sync.Mutex
+	CurrentOperators map[string]*pb.Operator
+	TaskMutex        sync.Mutex
+	OperatorMutex    sync.Mutex
+	FinishTasks      chan TaskInfo
 
 	// stream
-	TaskClients map[string]chan socket.TaskMessage         // map node address to stream connection
-	VoteClients map[string]chan socket.TaskResponseMessage // map node address to stream connection
+	TaskClients map[string]socket.TaskService_TaskStreamServer // map node address to stream connection
+	VoteClients map[string]socket.TaskService_VoteStreamServer // map node address to stream connection
 
 	// general channel
-	respondsChan chan socket.TaskResponseMessage
-	voteChan     chan socket.ResponseVoteMessage
+	respondsChan chan *socket.TaskResponseMessage
+	voteChan     chan *socket.ResponseVoteMessage
+
+	SeqMutex     sync.Mutex
+	taskSequence uint64
+
+	// default handler
+	pb.UnimplementedOperatorServiceServer
+	socket.UnimplementedTaskServiceServer
 }
 
 type TaskInfo struct {
 	Id              uint64
+	Proposer        string
 	TaskConfig      TaskConfig
 	Task            TaskPayload
 	TaskCreatedTime time.Time
-}
-
-type Operator struct {
-	Pubkey []byte
-	Stake  uint64
-	Models []string
+	ExpiredTime     time.Time
 }
 
 type TaskConfig struct {
@@ -72,6 +75,7 @@ type TaskConfig struct {
 type TaskPayload struct {
 	State            TaskState
 	Prompt           string
+	Model            string
 	CurrentTokens    []string
 	AppliedOperators [][]byte // Public keys of operators who applied to the task]
 	TempResult       *TempResultData
@@ -140,13 +144,27 @@ type ChatCompletionRequest struct {
 }
 
 type ChatCompletionResponse struct {
-	ID      string `json:"id"`
-	Object  string `json:"object"`
-	Created int64  `json:"created"`
-	Model   string `json:"model"`
+	ID      uint64    `json:"id"`
+	Object  string    `json:"object"`
+	Created time.Time `json:"created"`
+	Model   string    `json:"model"`
 	Choices []struct {
 		Index        int         `json:"index"`
 		Message      ChatMessage `json:"message"`
 		FinishReason string      `json:"finish_reason"`
 	} `json:"choices"`
+}
+
+type ErrorResponse struct {
+	Message string `json:"message"`
+}
+
+type Model struct {
+	NodeAddress string   `json:"node_address"`
+	Models      []string `json:"models"`
+}
+
+type ModelsResponse struct {
+	Status string  `json:"status"`
+	Models []Model `json:"models"`
 }
