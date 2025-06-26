@@ -87,7 +87,8 @@ func (agg *Aggregator) RespondTask(signedTaskResponse SignedTaskResponse, reply 
 	agg.logger.Info("Received signed task response", zap.Any("response", signedTaskResponse))
 
 	// Process the signed task response
-	if err := agg.processTaskResponse(signedTaskResponse); err != nil {
+	taskInfo := agg.PendingTasks[signedTaskResponse.TaskId]
+	if err := agg.processTaskResponse(&taskInfo, signedTaskResponse); err != nil {
 		agg.logger.Error("Failed to process signed task response", zap.Error(err))
 		return fmt.Errorf("failed to process task response: %v", err)
 	}
@@ -187,10 +188,9 @@ func (agg *Aggregator) processOperatorDeregisterRequest(pubkey []byte) error {
 	return fmt.Errorf("operator with pubkey %s not found", pubkey)
 }
 
-func (agg *Aggregator) processTaskResponse(signedTaskResponse SignedTaskResponse) error {
+func (agg *Aggregator) processTaskResponse(taskInfo *TaskInfo, signedTaskResponse SignedTaskResponse) error {
 	var err error
 	agg.TaskMutex.Lock()
-	taskInfo := agg.PendingTasks[signedTaskResponse.TaskId]
 
 	if err != nil {
 		return fmt.Errorf("can't check signature: %v", err)
@@ -274,7 +274,6 @@ func (agg *Aggregator) processTaskResponse(signedTaskResponse SignedTaskResponse
 		return fmt.Errorf("task %d is not in valid state", signedTaskResponse.TaskId)
 	}
 
-	agg.PendingTasks[signedTaskResponse.TaskId] = taskInfo
 	agg.TaskMutex.Unlock()
 	return nil
 }

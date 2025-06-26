@@ -62,25 +62,25 @@ func (op *Operator) Start(ctx context.Context) error {
 }
 
 func (op *Operator) FetchTasks() error {
-	var taskCount uint64
-	// looping
-	for {
-		previousTaskCount := taskCount
-		newTaskCount, err := LatestTaskCount(client, op.avsAddress)
-		if err != nil {
-			op.logger.Warn("Failed to subscribe to new tasks", zap.Any("err", err))
-			time.Sleep(RetryInterval)
-			continue
-		}
-		taskCount = newTaskCount
+	// var taskCount uint64
+	// // looping
+	// for {
+	// 	previousTaskCount := taskCount
+	// 	newTaskCount, err := LatestTaskCount(client, op.avsAddress)
+	// 	if err != nil {
+	// 		op.logger.Warn("Failed to subscribe to new tasks", zap.Any("err", err))
+	// 		time.Sleep(RetryInterval)
+	// 		continue
+	// 	}
+	// 	taskCount = newTaskCount
 
-		if taskCount > previousTaskCount {
-			err := op.QueueTask(ctx, client, previousTaskCount, taskCount)
-			if err != nil {
-				return fmt.Errorf("error queuing task: %v", err)
-			}
-		}
-	}
+	// 	if taskCount > previousTaskCount {
+	// 		err := op.QueueTask(ctx, client, previousTaskCount, taskCount)
+	// 		if err != nil {
+	// 			return fmt.Errorf("error queuing task: %v", err)
+	// 		}
+	// 	}
+	// }
 }
 
 func (op *Operator) RespondTask(ctx context.Context) error {
@@ -124,56 +124,6 @@ func (op *Operator) RespondTask(ctx context.Context) error {
 			Response:  price,
 		})
 	}
-	return nil
-}
-
-func GetMsgHash(taskId uint64, response big.Int) (string, error) {
-	taskIdBcs, err := bcs.SerializeU64(taskId)
-	if err != nil {
-		return "", fmt.Errorf("can not SerializeU64: %v", err)
-	}
-
-	responseBcs, err := bcs.SerializeU128(response)
-	if err != nil {
-		return "", fmt.Errorf("can not SerializeU128: %v", err)
-	}
-	payload := &aptos.ViewPayload{
-		Module: aptos.ModuleId{
-			Address: contract,
-			Name:    "service_manager",
-		},
-		Function: "get_msg_hash",
-		ArgTypes: []aptos.TypeTag{},
-		Args: [][]byte{
-			taskIdBcs, responseBcs,
-		},
-	}
-	vals, err := client.View(payload)
-	if err != nil {
-		return "", fmt.Errorf("can not get msg hash: %v", err)
-	}
-	task := vals[0].(string)
-	return task, nil
-}
-
-func (op *Operator) QueueTask(ctx context.Context, client *aptos.Client, start uint64, end uint64) error {
-	for i := start + 1; i <= end; i++ {
-		task, err := LoadTaskById(client, op.avsAddress, i)
-		if err != nil {
-			return fmt.Errorf("error loading task: %v", err)
-		}
-		responded := task["responded"].(bool)
-		if responded {
-			continue
-		}
-		op.logger.Info("Loaded new task with id:", zap.Any("task id", i))
-		op.TaskQueue <- Task{
-			Id:   i,
-			Task: task,
-		}
-		op.logger.Info("Queued new task with id:", zap.Any("task id", i))
-	}
-
 	return nil
 }
 
