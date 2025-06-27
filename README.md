@@ -14,11 +14,10 @@ Function:
 - Listen for Task Response
 - Config for listening
 
-
 Test:
-- Fetch được application cho task
-- Fetch được temp result trả về của 2 operator
-- Fetch được validate result
+- Fetch application for task
+- Fetch 2 operators's return temp result 
+- Fetch validate result
 
 
 ### 2. Operator
@@ -32,10 +31,10 @@ Function:
 - Submit result
 
 Test:
-- Fetch được task
-- Fetch được latest task result
-- Get được result của API 
-- Validate thành công
+- Fetch task
+- Fetch latest task result
+- Get result from model API 
+- Validate success
 
 
 ### 3. Task
