@@ -49,8 +49,7 @@ type Aggregator struct {
 	respondsChan chan *socket.TaskResponseMessage
 	voteChan     chan *socket.ResponseVoteMessage
 
-	SeqMutex     sync.Mutex
-	taskSequence uint64
+	SeqMutex sync.Mutex
 
 	// default handler
 	pb.UnimplementedOperatorServiceServer
@@ -131,6 +130,10 @@ type GenerateAnswerResponse struct {
 type VerifyAnswerResponse struct {
 }
 
+type GetTaskRequest struct {
+	TaskId uint64 `json:"task_id"`
+}
+
 // chat completions api
 type ChatMessage struct {
 	Role    string `json:"role"`
@@ -148,11 +151,12 @@ type ChatCompletionResponse struct {
 	Object  string    `json:"object"`
 	Created time.Time `json:"created"`
 	Model   string    `json:"model"`
-	Choices []struct {
-		Index        int         `json:"index"`
-		Message      ChatMessage `json:"message"`
-		FinishReason string      `json:"finish_reason"`
-	} `json:"choices"`
+	// Choices []struct {
+	// 	Index        int         `json:"index"`
+	// 	Message      ChatMessage `json:"message"`
+	// 	FinishReason string      `json:"finish_reason"`
+	// } `json:"choices"`
+	Content string `json:"content"`
 }
 
 type ErrorResponse struct {

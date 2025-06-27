@@ -1,18 +1,20 @@
 package operator
 
 import (
-	"avs/aggregator"
-	pb "avs/types/proto/aggregator"
-
+	"context"
 	"fmt"
 	"net/rpc"
 	"time"
 
 	"github.com/pkg/errors"
+	"google.golang.org/grpc"
+
+	pb "avs/types/proto/aggregator"
+	"avs/types/proto/socket"
 )
 
 func NewAggregatorRpcClient(aggregatorIpPortAddr string) (*AggregatorRpcClient, error) {
-	client, err := rpc.DialHTTP("tcp", aggregatorIpPortAddr)
+	client, err := grpc.NewClient(aggregatorIpPortAddr)
 	if err != nil {
 		return nil, err
 	}
@@ -23,47 +25,21 @@ func NewAggregatorRpcClient(aggregatorIpPortAddr string) (*AggregatorRpcClient, 
 	}, nil
 }
 
-func (c *AggregatorRpcClient) SendSignedTaskResponseToAggregator(signedTaskResponse aggregator.SignedTaskResponse) {
-	var reply uint8
+func (op *Operator) SendRegisterOperatorRequest(request *pb.Operator) {
 	for retries := 0; retries < MaxRetries; retries++ {
-		err := c.rpcClient.Call("Aggregator.RespondTask", signedTaskResponse, &reply)
+		ctx := context.Background()
+		operatorServiceClient := pb.NewOperatorServiceClient(op.AggRpcClient.rpcClient)
+		resp, err := operatorServiceClient.RegisterOperator(ctx, &pb.RegisterRequest{})
 		if err != nil {
 			fmt.Println("Received error from aggregator", "err :", err)
 			if errors.Is(err, rpc.ErrShutdown) {
 				fmt.Println("Aggregator is shutdown. Reconnecting...")
-				client, err := rpc.DialHTTP("tcp", c.aggregatorIpPortAddr)
+				client, err := grpc.NewClient(op.AggRpcClient.aggregatorIpPortAddr)
 				if err != nil {
 					fmt.Println("Could not reconnect to aggregator", "err", err)
 					time.Sleep(RetryInterval)
 				} else {
-					c.rpcClient = client
-					fmt.Println("Reconnected to aggregator")
-				}
-			} else {
-				fmt.Println("Received error from aggregator:", err, ". Retrying RespondTask RPC call...")
-				time.Sleep(RetryInterval)
-			}
-		} else {
-			fmt.Println("Signed task response header accepted by aggregator.", "reply", reply)
-			return
-		}
-	}
-}
-
-func (c *AggregatorRpcClient) SendRegisterOperatorRequest(request *pb.Operator) {
-	var reply uint8
-	for retries := 0; retries < MaxRetries; retries++ {
-		err := c.rpcClient.Call("Aggregator.HandleOperatorRegister", request, &reply)
-		if err != nil {
-			fmt.Println("Received error from aggregator", "err :", err)
-			if errors.Is(err, rpc.ErrShutdown) {
-				fmt.Println("Aggregator is shutdown. Reconnecting...")
-				client, err := rpc.DialHTTP("tcp", c.aggregatorIpPortAddr)
-				if err != nil {
-					fmt.Println("Could not reconnect to aggregator", "err", err)
-					time.Sleep(RetryInterval)
-				} else {
-					c.rpcClient = client
+					op.AggRpcClient.rpcClient = client
 					fmt.Println("Reconnected to aggregator")
 				}
 			} else {
@@ -71,26 +47,43 @@ func (c *AggregatorRpcClient) SendRegisterOperatorRequest(request *pb.Operator) 
 				time.Sleep(RetryInterval)
 			}
 		} else {
-			fmt.Println("Register operator request accepted by aggregator.", "reply", reply)
+			// if success boostrap stream channels
+			taskServiceClient := socket.NewTaskServiceClient(op.AggRpcClient.rpcClient)
+			taskstream, err := taskServiceClient.TaskStream(context.Background())
+			if err != nil {
+				op.logger.Error(fmt.Sprintf("can not create new tasks stream to aggregator server: %v", err))
+			}
+
+			votestream, err := taskServiceClient.VoteStream(context.Background())
+			if err != nil {
+				op.logger.Error(fmt.Sprintf("can not create new votes stream to aggregator server: %v", err))
+			}
+
+			op.TaskStream = taskstream
+			op.VoteStream = votestream
+			fmt.Println("Register operator request accepted by aggregator.", "reply", resp.Respond)
 			return
 		}
 	}
 }
 
-func (c *AggregatorRpcClient) SendDeregisterOperatorRequest(request []byte) {
-	var reply uint8
+func (op *Operator) SendDeregisterOperatorRequest(request []byte) {
 	for retries := 0; retries < MaxRetries; retries++ {
-		err := c.rpcClient.Call("Aggregator.HandleOperatorDeregister", request, &reply)
+		ctx := context.Background()
+		operatorServiceClient := pb.NewOperatorServiceClient(op.AggRpcClient.rpcClient)
+		resp, err := operatorServiceClient.DeregisterOperator(ctx, &pb.DeregisterRequest{
+			Pubkey: string(request),
+		})
 		if err != nil {
 			fmt.Println("Received error from aggregator", "err :", err)
 			if errors.Is(err, rpc.ErrShutdown) {
 				fmt.Println("Aggregator is shutdown. Reconnecting...")
-				client, err := rpc.DialHTTP("tcp", c.aggregatorIpPortAddr)
+				client, err := grpc.NewClient(op.AggRpcClient.aggregatorIpPortAddr)
 				if err != nil {
 					fmt.Println("Could not reconnect to aggregator", "err", err)
 					time.Sleep(RetryInterval)
 				} else {
-					c.rpcClient = client
+					op.AggRpcClient.rpcClient = client
 					fmt.Println("Reconnected to aggregator")
 				}
 			} else {
@@ -98,7 +91,15 @@ func (c *AggregatorRpcClient) SendDeregisterOperatorRequest(request []byte) {
 				time.Sleep(RetryInterval)
 			}
 		} else {
-			fmt.Println("Deregister operator request accepted by aggregator.", "reply", reply)
+			// remove stream channels
+			if op.TaskStream != nil {
+				op.TaskStream.CloseSend()
+			}
+
+			if op.VoteStream != nil {
+				op.VoteStream.CloseSend()
+			}
+			fmt.Println("Deregister operator request accepted by aggregator.", "reply", resp.Respond)
 			return
 		}
 	}

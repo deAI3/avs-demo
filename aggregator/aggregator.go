@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"go.uber.org/zap"
 )
@@ -21,7 +22,7 @@ func NewAggregator(aggregatorConfig AggregatorConfig, logger *zap.Logger) (*Aggr
 		TaskQueue:        make(chan TaskInfo, taskQueueSize),
 		PendingTasks:     make(map[uint64]TaskInfo),
 		CurrentTaskId:    0,
-		// Network: network,
+		FinishTasks:      make(chan TaskInfo, 100),
 	}
 	return &agg, nil
 }
@@ -74,15 +75,15 @@ func (agg *Aggregator) Start(ctx context.Context) error {
 
 	// handle votes
 	// update task
-	go func() {
-		for {
-			select {
-			case vote := <-agg.voteChan:
+	// go func() {
+	// 	for {
+	// 		select {
+	// 		case vote := <-agg.voteChan:
 
-			}
+	// 		}
 
-		}
-	}()
+	// 	}
+	// }()
 
 	// distribute tasks to nodes through the following steps:
 	//
@@ -119,6 +120,40 @@ func (agg *Aggregator) Start(ctx context.Context) error {
 	cancel()
 
 	return nil
+}
+
+func (agg *Aggregator) NewTask(payload ChatCompletionRequest) {
+	// update task sequence
+	agg.SeqMutex.Lock()
+	seq := agg.CurrentTaskId
+	agg.CurrentTaskId += 1
+	agg.SeqMutex.Unlock()
+
+	createdTime := time.Now()
+	expiredTime := createdTime.Add(time.Minute * 2)
+
+	// insert task to queue
+	agg.TaskMutex.Lock()
+
+	taskInfo := TaskInfo{
+		Id:         seq,
+		Proposer:   agg.PickProposer(seq),
+		TaskConfig: TaskConfig{},
+		Task: TaskPayload{
+			State:         WaitingForApply,
+			Prompt:        payload.Messages[0].Content,
+			Model:         payload.Model,
+			CurrentTokens: []string{},
+			TempResult:    &TempResultData{},
+			FinalResult:   &FinalResultData{},
+		},
+		TaskCreatedTime: createdTime,
+		ExpiredTime:     expiredTime,
+	}
+
+	agg.TaskQueue <- taskInfo
+	agg.PendingTasks[seq] = taskInfo
+	agg.TaskMutex.Unlock()
 }
 
 // pseudo proposer picking

@@ -1,12 +1,12 @@
 package operator
 
 import (
-	"math/big"
-	"net/rpc"
+	"avs/aggregator"
+	"avs/types/proto/socket"
 
 	aptos "github.com/aptos-labs/aptos-go-sdk"
-	"github.com/aptos-labs/aptos-go-sdk/bcs"
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
 
 	"github.com/Layr-Labs/eigensdk-go/crypto/bls"
 )
@@ -16,15 +16,16 @@ type Config struct {
 }
 
 type Operator struct {
-	logger  *zap.Logger
-	account *aptos.Account
-	// TODO: change this to aptos-sdk fork
-	// operatorId   []byte
-	// avsAddress   aptos.AccountAddress
+	logger *zap.Logger
+
 	BlsPrivateKey []byte
+	TaskStream    socket.TaskService_TaskStreamClient
+	VoteStream    socket.TaskService_VoteStreamClient
 	AggRpcClient  AggregatorRpcClient
+	ModelApi      string
 	// network      aptos.NetworkConfig
-	TaskQueue chan Task
+	TaskQueue     chan Task
+	ResponseQueue chan *socket.TaskResponseMessage
 }
 
 type Task struct {
@@ -33,15 +34,15 @@ type Task struct {
 }
 
 type AggregatorRpcClient struct {
-	rpcClient            *rpc.Client
+	rpcClient            *grpc.ClientConn
 	aggregatorIpPortAddr string
-	
 }
 
 type OperatorConfig struct {
 	BlsPrivateKey []byte
 	// AvsAddress           string
 	AggregatorIpPortAddr string
+	ModelApi             string
 	// OperatorId           eigentypes.OperatorId
 }
 
@@ -65,26 +66,7 @@ type Metadata struct {
 	Inner aptos.AccountAddress
 }
 
-type U128Struct struct {
-	Value *big.Int `json:"value"`
-}
-
-func (u *U128Struct) MarshalBCS(ser *bcs.Serializer) {
-	ser.U128(*u.Value)
-}
-
-type U8Struct struct {
-	Value uint8
-}
-
-func (u *U8Struct) MarshalBCS(ser *bcs.Serializer) {
-	ser.U8(u.Value)
-}
-
-type U64Struct struct {
-	Value uint64
-}
-
-func (u *U64Struct) MarshalBCS(ser *bcs.Serializer) {
-	ser.U64(u.Value)
+type ChatCompletionRequest struct {
+	TaskId  uint64                           `json:"task_id"`
+	Request aggregator.ChatCompletionRequest `json:"request"`
 }

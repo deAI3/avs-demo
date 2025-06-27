@@ -13,6 +13,7 @@ import (
 )
 
 const (
+	flagStream              = "streamming"
 	flagAptosNetwork        = "aptos-network"
 	flagAggregatorConfig    = "aggregator-config"
 	flagAggregatorStorePath = "aggregator-store-path"
@@ -67,7 +68,6 @@ func Start(logger *zap.Logger) *cobra.Command {
 		},
 	}
 	cmd.Flags().String(flagAggregatorConfig, "config/aggregator-config.json", "see the example at config/aggregator-example.json")
-	cmd.Flags().String(flagAptosNetwork, "devnet", "choose network to connect to: mainnet, testnet, devnet, localnet")
 	return cmd
 }
 
@@ -114,6 +114,58 @@ func CreateAggregatorConfig(logger *zap.Logger) *cobra.Command {
 	return cmd
 }
 
+func RequestTask(logger *zap.Logger) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "request-task",
+		Short: "request task from aggregator",
+		Args:  cobra.MinimumNArgs(3),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			logger.Info("Requesting task from aggregator...")
+			aggregatorConfigPath, err := cmd.Flags().GetString(flagAggregatorConfig)
+			if err != nil {
+				return errors.Wrap(err, flagAggregatorConfig)
+			}
+
+			aggregatorConfig, err := loadAggregatorConfig(aggregatorConfigPath)
+			if err != nil {
+				return fmt.Errorf("can not load aggregator config: %s", err)
+			}
+
+			aggregator, err := NewAggregator(*aggregatorConfig, logger)
+			if err != nil {
+				logger.Error("Cannot create aggregator", zap.Any("err", err))
+				return err
+			}
+
+			model := args[0]
+			stream, err := cmd.Flags().GetBool(flagStream)
+			if err != nil {
+				return errors.Wrap(err, flagStream)
+			}
+
+			if (len(args)-1)%2 != 0 {
+				return errors.New("args length after index 1 is not even")
+			}
+
+			messages := make([]ChatMessage, 0, (len(args)-1)/2)
+			for i := 1; i < len(args); i += 2 {
+				messages = append(messages, ChatMessage{
+					Role:    args[i],
+					Content: args[i+1],
+				})
+			}
+			aggregator.NewTask(ChatCompletionRequest{
+				Model:    model,
+				Messages: messages,
+				Stream:   stream,
+			})
+			return nil
+		},
+	}
+	cmd.Flags().String(flagAggregatorConfig, "config/aggregator-config.json", "see the example at config/aggregator-example.json")
+	cmd.Flags().Bool(flagStream, false, "using streaming mode to request model or not")
+	return cmd
+}
 func loadAggregatorConfig(filename string) (*AggregatorConfig, error) {
 	// Open the config file
 	file, err := os.Open(filename)

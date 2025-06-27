@@ -3,7 +3,6 @@ package aggregator
 import (
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -15,8 +14,8 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-func (agg *Aggregator) ChatCompletions(c *gin.Context) {
-	var payload ChatCompletionRequest
+func (agg *Aggregator) GetTask(c *gin.Context) {
+	var payload GetTaskRequest
 
 	if err := c.BindJSON(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
@@ -25,62 +24,12 @@ func (agg *Aggregator) ChatCompletions(c *gin.Context) {
 		return
 	}
 
-	// update task sequence
-	agg.SeqMutex.Lock()
-	seq := agg.taskSequence
-	agg.taskSequence += 1
-	agg.SeqMutex.Unlock()
-
-	createdTime := time.Now()
-	expiredTime := createdTime.Add(time.Minute * 2)
-
-	// insert task to queue
-	agg.TaskMutex.Lock()
-	agg.TaskQueue <- TaskInfo{
-		Id:         seq,
-		Proposer:   agg.PickProposer(seq),
-		TaskConfig: TaskConfig{},
-		Task: TaskPayload{
-			State:         WaitingForApply,
-			Prompt:        payload.Messages[0].Content,
-			Model:         payload.Model,
-			CurrentTokens: []string{},
-			TempResult:    &TempResultData{},
-			FinalResult:   &FinalResultData{},
-		},
-		TaskCreatedTime: createdTime,
-		ExpiredTime:     expiredTime,
-	}
-	agg.TaskMutex.Unlock()
-
-	// wait for the result
-	for {
-		if time.Now().After(expiredTime) {
-			c.JSON(http.StatusRequestTimeout, ErrorResponse{
-				Message: "request expired",
-			})
-			return
-		}
-
-		select {
-		case resp := <-agg.FinishTasks:
-			if resp.Id == seq {
-				c.JSON(http.StatusOK, ChatCompletionResponse{
-					ID:      seq,
-					Object:  "chat.completion",
-					Created: time.Now(),
-					Model:   payload.Model,
-					Choices: []struct {
-						Index        int         `json:"index"`
-						Message      ChatMessage `json:"message"`
-						FinishReason string      `json:"finish_reason"`
-					}{},
-				})
-			}
-			return
-		default:
-			agg.logger.Info("Waiting for result...")
-		}
+	if taskInfo, ok := agg.PendingTasks[payload.TaskId]; ok {
+		c.JSON(http.StatusOK, taskInfo)
+	} else {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Message: "Task not found",
+		})
 	}
 }
 
